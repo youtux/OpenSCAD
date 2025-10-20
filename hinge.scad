@@ -58,10 +58,7 @@ module hingeBodyHalf() {
         }
         plateHoles();
     }
-    // Cut out the pin hole
-    translate([0,pivot_radius,0]){
-        cylinder(h=hinge_half_extrude_length*2, r=pin_radius+clearance);
-    }
+    
 }
 
 module plateHoles() {
@@ -69,7 +66,7 @@ module plateHoles() {
         echo("increment is currently", increment);
         translate([base_width/2+pivot_radius,-base_thickness,increment*mountingHoleMoveIncrement + mountingHoleEdgeOffset]){
             rotate([-90,0,0]){
-            cylinder(r=mountingHoleRadius,h=base_thickness*4);
+                cylinder(r=mountingHoleRadius,h=base_thickness*4);
             }
         }
     }
@@ -90,5 +87,5 @@ module hingeHalfMale() {
         }
 }
 
-hingeHalfFemale();
+//hingeHalfFemale();
 hingeHalfMale();
