@@ -2,16 +2,21 @@ include <../libs/round-anything/polyround.scad>; // Include the Round-Anything l
 include <../libs/BOSL2/std.scad>
 
 $fn=100;
+epsilon = 0.001;
 
 base_width = 170; // [500]
 base_depth = 157; // [500]
+base_height = 60; // [500]
+
+
+drainage_height = 40;
+
 
 spout_length = 2.5;
 spout_opening_width = 20;
 
-base_height = 60; // [200]
 base_layer_height = 2;
-epsilon = 0.001;
+assert(base_layer_height <= drainage_height && drainage_height <= base_height, "Drainage height must be between 0 and base height");
 
 wall_thickness = 2; // [10]
 
@@ -20,8 +25,24 @@ fillet_radius = 50;
 spout_rounding = wall_thickness / 5;
 
 assert(0<= spout_rounding && spout_rounding <= wall_thickness, "Spout rounding must be between 0 and wall thickness");
-
 assert(spout_length >= wall_thickness+spout_rounding, "Spout length must be greater than twice the wall thickness");
+
+module prism(l, w, h) {
+    polyhedron(
+        // pt      0        1        2        3        4        5
+        points=[[0,0,0], [0,w,h], [l,w,h], [l,0,0], [0,w,0], [l,w,0]],
+        // top sloping face (A)
+        faces=[[0,1,2,3],
+        // vertical rectangular face (B)
+        [2,1,4,5],
+        // bottom face (C)
+        [0,3,5,4],
+        // rear triangular face (D)
+        [0,4,1],
+        // front triangular face (E)
+        [3,2,5]]
+    );
+}
 
 module left_spout_border() {
     translate([-wall_thickness, -wall_thickness])
@@ -55,18 +76,46 @@ module wall_perimeter() {
             left_spout_border();
 }
 
-wall_perimeter();
+module wall() {
+    linear_extrude(base_height)
+        wall_perimeter();
+}
 
-// difference() {
-//     linear_extrude(base_height){
-//         base();
+module base() {
+    linear_extrude(base_layer_height)
+        base_rect();
+    
+    // let's add an inclined plane that will help the water drain to the spout
+    // we will want to use a polyhedron for this
+    // we basically want an upside-down pyramid (apex at top, base at bottom)
+
+    bottom_left = [-base_width/2, -base_depth/2, 0];
+    up_left = [-base_width/2, base_depth/2, 0];
+    up_right = [base_width/2, base_depth/2, 0];
+    bottom_right = [base_width/2, -base_depth/2, 0];
         
-//     }
-    
-    
-//     // now let's carve out the soap holder cavity
-//     translate([0,0,base_layer_height])
-//         linear_extrude(base_height-base_layer_height + epsilon)
-//         offset(-wall_thickness)
-//             base();
-// }
+
+    difference() {
+        translate([0,0,base_layer_height]) {
+            translate([spout_opening_width/2,base_depth/2,0]) rotate([0, 0, 270])
+                prism(base_depth, base_width/2 - spout_opening_width/2, drainage_height);
+                // TODO: THE OTHER INCLINED PLANES
+        }
+        //Remove everything outside the inner area (leaving wall_thickness)
+        linear_extrude(drainage_height *10)
+            difference() {  
+                offset(50)
+                    base_rect();
+                base_rect();
+            }
+    }
+}
+
+module soap_holder() {
+    //color("#4682B4") 
+        base();
+    // color("palevioletred")
+        wall();
+}
+
+soap_holder();
