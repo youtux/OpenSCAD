@@ -4,12 +4,12 @@ include <../libs/BOSL2/std.scad>
 $fn=100;
 epsilon = 0.001;
 
-base_width = 170; // [500]
+base_width = 270; // [500]
 base_depth = 157; // [500]
 base_height = 60; // [500]
 
 
-drainage_height = 40;
+drainage_height = 10;
 
 
 spout_length = 2.5;
@@ -40,7 +40,8 @@ module prism(l, w, h) {
         // rear triangular face (D)
         [0,4,1],
         // front triangular face (E)
-        [3,2,5]]
+        [3,2,5]],
+        convexity=5
     );
 }
 
@@ -57,6 +58,12 @@ module left_spout_border() {
 
 module base_rect () {
     rect([base_width, base_depth], rounding=fillet_radius);
+}
+
+module side_inclined_plane() {
+    translate([spout_opening_width/2,base_depth/2,0])
+                rotate([0, 0, 270])
+                    prism(base_depth, base_width/2 - spout_opening_width/2, drainage_height);
 }
 
 module wall_perimeter() { 
@@ -96,10 +103,15 @@ module base() {
         
 
     difference() {
+        // TODO: Not the best looking, but for now it can do
         translate([0,0,base_layer_height]) {
-            translate([spout_opening_width/2,base_depth/2,0]) rotate([0, 0, 270])
-                prism(base_depth, base_width/2 - spout_opening_width/2, drainage_height);
-                // TODO: THE OTHER INCLINED PLANES
+            // The inclined side planes
+            mirror_copy([1,0,0])
+                side_inclined_plane();
+            
+            // the back inclined plane
+            translate([-base_width/2,-base_depth/2,0])
+                    prism(base_width, base_depth, drainage_height);
         }
         //Remove everything outside the inner area (leaving wall_thickness)
         linear_extrude(drainage_height *10)
@@ -112,9 +124,9 @@ module base() {
 }
 
 module soap_holder() {
-    //color("#4682B4") 
+    color("#4682B4") 
         base();
-    // color("palevioletred")
+    color("palevioletred")
         wall();
 }
 
