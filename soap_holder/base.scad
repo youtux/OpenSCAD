@@ -4,8 +4,8 @@ include <../libs/BOSL2/std.scad>
 $fn=100;
 epsilon = 0.001;
 
-base_width = 270; // [500]
-base_depth = 157; // [500]
+base_width = 100; // [500]
+base_depth = 100; // [500]
 base_height = 60; // [500]
 
 plate_height = 2;
@@ -14,9 +14,8 @@ plate_height = 2;
 drainage_height = 10;
 
 pattern_unit_size = 5;
-pattern_rows = base_depth / (pattern_unit_size * 3);
-pattern_cols = base_width / (pattern_unit_size * 3);
-
+pattern_spacing = 10;
+pattern_min_margin = 2;
 
 spout_length = 2.5;
 spout_opening_width = 20;
@@ -26,7 +25,7 @@ assert(base_layer_height <= drainage_height && drainage_height <= base_height, "
 
 wall_thickness = 2; // [10]
 
-fillet_radius = 50;
+fillet_radius = 10;
 
 spout_rounding = wall_thickness / 5;
 
@@ -131,33 +130,54 @@ module base() {
 
 module drainage_hole_pattern(size) {
     // Create a single hole as a 2D shape
-    circle(r=size); // Adjust radius as needed
+    circle(r=size/2);
 }
 
-module create_hole_pattern(num_cols, num_rows) {
-    // Calculate spacing based on the base dimensions and number of holes
-    x_spacing = base_width / (num_cols + 1);
-    y_spacing = base_depth / (num_rows + 1);
-    
-    // Create holes in a pattern based on provided number of columns and rows
-    for (i = [0 : num_cols - 1]) {
-        for (j = [0 : num_rows - 1]) {
-            translate([(i + 1) * x_spacing - base_width / 2, (j + 1) * y_spacing - base_depth / 2, 0])
+module create_hole_pattern() {
+    // Calculate available area inside the plate
+    plate_width = base_width - wall_thickness*2;
+    plate_depth = base_depth - wall_thickness*2;
+
+    // Compute max number of holes that fit inside the plate with margin
+    pattern_rows = floor((plate_depth - pattern_min_margin*2 + pattern_spacing) / (pattern_unit_size + pattern_spacing));
+    pattern_cols = floor((plate_width - pattern_min_margin*2 + pattern_spacing) / (pattern_unit_size + pattern_spacing));
+    x_spacing = pattern_unit_size + pattern_spacing;
+    y_spacing = pattern_unit_size + pattern_spacing;
+
+    // Compute total pattern size
+    total_width = (pattern_cols - 1) * x_spacing;
+    total_height = (pattern_rows - 1) * y_spacing;
+
+    // Center the pattern in the plate area
+    for (i = [0 : pattern_cols - 1]) {
+        for (j = [0 : pattern_rows - 1]) {
+            x = -total_width/2 + i * x_spacing;
+            y = -total_height/2 + j * y_spacing;
+            translate([x, y, 0]) {
                 children();
+            }
         }
     }
 }
 
 module plate() {
     // A simple plate with rounded corners
-    translate([0,0,base_layer_height + drainage_height])
-        linear_extrude(plate_height)
+    
+    linear_extrude(plate_height)
+        translate([0,0,base_layer_height + drainage_height])
             difference() {
                 rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=fillet_radius - wall_thickness);
-
-                // Use the new hole pattern function with customizable number of columns and rows
-                create_hole_pattern(num_cols=pattern_cols, num_rows=pattern_rows)
-                    drainage_hole_pattern(size=pattern_unit_size);
+                
+                intersection() {
+                     // Limit holes to the area within the min margin
+                    rect(
+                        [base_width - wall_thickness*2 - pattern_min_margin,
+                        base_depth - wall_thickness*2 - pattern_min_margin],
+                        rounding=fillet_radius - wall_thickness);
+                    
+                    create_hole_pattern()
+                        drainage_hole_pattern(size=pattern_unit_size);
+                }
                 
             }
 }
@@ -169,6 +189,7 @@ module soap_holder() {
     //     wall();
     // color("lightgray")
         plate();
+
 }
 
 soap_holder();
