@@ -8,6 +8,8 @@ base_width = 270; // [500]
 base_depth = 157; // [500]
 base_height = 60; // [500]
 
+plate_height = 2;
+
 
 drainage_height = 10;
 
@@ -113,7 +115,7 @@ module base() {
             translate([-base_width/2,-base_depth/2,0])
                     prism(base_width, base_depth, drainage_height);
         }
-        //Remove everything outside the inner area (leaving wall_thickness)
+        // Remove everything outside the inner area (leaving wall_thickness)
         linear_extrude(drainage_height *10)
             difference() {  
                 offset(50)
@@ -123,11 +125,20 @@ module base() {
     }
 }
 
+module plate() {
+    // A simple plate with rounded corners
+    translate([0,0,base_layer_height + drainage_height])
+        linear_extrude(plate_height)
+            rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=fillet_radius - wall_thickness);
+}
+
 module soap_holder() {
     color("#4682B4") 
         base();
     color("palevioletred")
         wall();
+    color("lightgray")
+        plate();
 }
 
 soap_holder();
