@@ -13,6 +13,10 @@ plate_height = 2;
 
 drainage_height = 10;
 
+pattern_unit_size = 5;
+pattern_rows = base_depth / (pattern_unit_size * 3);
+pattern_cols = base_width / (pattern_unit_size * 3);
+
 
 spout_length = 2.5;
 spout_opening_width = 20;
@@ -125,19 +129,45 @@ module base() {
     }
 }
 
+module drainage_hole_pattern(size) {
+    // Create a single hole as a 2D shape
+    circle(r=size); // Adjust radius as needed
+}
+
+module create_hole_pattern(num_cols, num_rows) {
+    // Calculate spacing based on the base dimensions and number of holes
+    x_spacing = base_width / (num_cols + 1);
+    y_spacing = base_depth / (num_rows + 1);
+    
+    // Create holes in a pattern based on provided number of columns and rows
+    for (i = [0 : num_cols - 1]) {
+        for (j = [0 : num_rows - 1]) {
+            translate([(i + 1) * x_spacing - base_width / 2, (j + 1) * y_spacing - base_depth / 2, 0])
+                children();
+        }
+    }
+}
+
 module plate() {
     // A simple plate with rounded corners
     translate([0,0,base_layer_height + drainage_height])
         linear_extrude(plate_height)
-            rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=fillet_radius - wall_thickness);
+            difference() {
+                rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=fillet_radius - wall_thickness);
+
+                // Use the new hole pattern function with customizable number of columns and rows
+                create_hole_pattern(num_cols=pattern_cols, num_rows=pattern_rows)
+                    drainage_hole_pattern(size=pattern_unit_size);
+                
+            }
 }
 
 module soap_holder() {
-    color("#4682B4") 
-        base();
-    color("palevioletred")
-        wall();
-    color("lightgray")
+    // color("#4682B4") 
+    //     base();
+    // color("palevioletred")
+    //     wall();
+    // color("lightgray")
         plate();
 }
 
