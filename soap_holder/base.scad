@@ -64,6 +64,30 @@ module prism(l, w, h) {
     );
 }
 
+// Parametric bumpy arc (arc with circles and ring)
+// r_arc: radius of the arc
+// angle_deg: angle of the arc in degrees
+// r_circle: radius of circles placed along the arc
+// ring_width: width of the ring on the inside
+// circle_fn: $fn value for circle resolution
+module bumpy_arc(r_arc, angle_deg, r_circle, ring_width, circle_fn=50) {
+    // Calculate number of circles to fit along arc
+    arc_length = r_arc * (angle_deg * PI / 180);
+    n_circles = ceil(arc_length / (2 * r_circle)) + 1;
+    
+    // Generate arc path
+    path = arc(r=r_arc, n=n_circles, angle=angle_deg);
+    
+    // Draw circles at each point along the arc
+    for (p = path) {
+        translate(p)
+            circle(r=r_circle, $fn=circle_fn);
+    }
+    
+    // Draw ring on the inside
+    region(ring(n=50, r1=r_arc - ring_width, r2=r_arc, angle=angle_deg));
+}
+
 module left_spout_border() {
     translate([-wall_thickness, -wall_thickness])
         ring(32,r=wall_thickness, ring_width=wall_thickness, angle=90);
@@ -228,4 +252,5 @@ module soap_holder() {
         color("lightgray") plate();
 }
 
-soap_holder();
+// soap_holder();
+
