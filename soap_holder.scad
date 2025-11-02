@@ -1,4 +1,4 @@
-include <round-anything/polyround.scad>; // Include the Round-Anything library
+include <round-anything/polyround.scad>
 include <BOSL2/std.scad>
 
 /* [Parts to display] */
@@ -19,7 +19,6 @@ base_depth = 100; // [500]
 // Total height of the soap holder walls
 base_height = 60; // [500]
 
-/* TODO: Maybe this can be deleted */
 // Height of the solid bottom layer
 base_layer_height = 2; // [20]
 
