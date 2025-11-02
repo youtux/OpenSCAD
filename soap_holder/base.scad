@@ -2,36 +2,49 @@ include <../libs/round-anything/polyround.scad>; // Include the Round-Anything l
 include <../libs/BOSL2/std.scad>
 include <hex-grid.scad>
 
-$fn=10;
-epsilon = 0.001;
+$fn=30;
 
+/* [Parts to display] */
+show_base = true;
+show_wall = true;
+show_plate = true;
+
+/* [Base] */
 base_width = 100; // [500]
 base_depth = 100; // [500]
 base_height = 60; // [500]
 
-plate_height = 2;
-
-
-drainage_height = 10;
-
-tile_size = 3;
-tile_gap = 0.5;
-pattern_min_margin = 2;
-
-spout_length = 2.5;
-spout_opening_width = 20;
-
-base_layer_height = 2;
-assert(base_layer_height <= drainage_height && drainage_height <= base_height, "Drainage height must be between 0 and base height");
-
 wall_thickness = 2; // [10]
 
-fillet_radius = 10;
+wall_fillet_radius = 10; // [250]
+assert(wall_fillet_radius <= min(base_width, base_depth)/2, "Wall fillet radius can't be greater than half the smaller base dimension");
 
-spout_rounding = wall_thickness / 5;
+/* [Base] [Drainage]*/
+drainage_height = 10; // [50]
+assert(drainage_height <= base_height, "Drainage height can't be greater than base height");
 
-assert(0<= spout_rounding && spout_rounding <= wall_thickness, "Spout rounding must be between 0 and wall thickness");
-assert(spout_length >= wall_thickness+spout_rounding, "Spout length must be greater than twice the wall thickness");
+base_layer_height = 2; // [20]
+assert(base_layer_height <= drainage_height, "Base layer height can't be greater than drainage height");
+
+/* [Base] [Drainage spout] */
+spout_opening_width = 20; // [100]
+
+
+spout_fillet_radius = 0.5; // [100]
+assert(0<= spout_fillet_radius && spout_fillet_radius <= wall_thickness / 2, "Spout fillet radius can't be greater than half the wall thickness");
+
+spout_depth = 2.5; // [50]
+assert(spout_depth >= wall_thickness + spout_fillet_radius, "Spout depth must be greater than twice the wall thickness");
+
+/* [Plate] */
+plate_height = 2; // [100]
+
+tile_size = 3; // [10]
+tile_gap = 0.5; // [20]
+pattern_min_margin = 2; // [20]
+
+/* [Hidden] */
+epsilon = 0.001;
 
 module prism(l, w, h) {
     polyhedron(
@@ -56,14 +69,14 @@ module left_spout_border() {
         ring(32,r=wall_thickness, ring_width=wall_thickness, angle=90);
     translate([0, -wall_thickness])
         rect(
-            [wall_thickness, spout_length - wall_thickness],
+            [wall_thickness, spout_depth - wall_thickness],
             anchor=TOP+LEFT,
-            rounding=[0,0,spout_rounding,spout_rounding]
+            rounding=[0,0,spout_fillet_radius,spout_fillet_radius]
         );
 }
 
 module base_rect () {
-    rect([base_width, base_depth], rounding=fillet_radius);
+    rect([base_width, base_depth], rounding=wall_fillet_radius);
 }
 
 module side_inclined_plane() {
@@ -185,14 +198,14 @@ module plate() {
     translate([0,0,base_layer_height + drainage_height])
         linear_extrude(plate_height)
             difference() {
-                rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=fillet_radius - wall_thickness);
+                rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=wall_fillet_radius - wall_thickness);
                 
                 intersection() {
                      // Limit holes to the area within the min margin
                     rect(
                         [base_width - wall_thickness*2 - pattern_min_margin,
                         base_depth - wall_thickness*2 - pattern_min_margin],
-                        rounding=fillet_radius - wall_thickness);
+                        rounding=wall_fillet_radius - wall_thickness);
                     
                     tile_pitch = tile_size + tile_gap;    
                     tile_grid(
@@ -207,13 +220,12 @@ module plate() {
 }
 
 module soap_holder() {
-    color("steelblue") 
-        base();
-    color("palevioletred")
-        wall();
-    color("lightgray")
-        plate();
-
+    if (show_base) 
+        color("steelblue") base();
+    if (show_wall) 
+        color("palevioletred") wall();
+    if (show_plate) 
+        color("lightgray") plate();
 }
 
 soap_holder();
