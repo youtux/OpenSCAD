@@ -1,0 +1,6 @@
+[submodule "BOSL2"]
+	path = BOSL2
+	url = https://github.com/BelfrySCAD/BOSL2.git
+[submodule "round-anything"]
+	path = round-anything
+	url = https://github.com/Irev-Dev/Round-Anything.git
