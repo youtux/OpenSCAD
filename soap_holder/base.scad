@@ -252,5 +252,4 @@ module soap_holder() {
         color("lightgray") plate();
 }
 
-// soap_holder();
-
+soap_holder();
