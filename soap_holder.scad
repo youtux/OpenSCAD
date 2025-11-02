@@ -4,44 +4,63 @@ include <BOSL2/std.scad>
 $fn=10;
 
 /* [Parts to display] */
+// Display the base with drainage slope
 show_base = true;
+// Display the outer walls
 show_wall = true;
+// Display the drainage plate with holes
 show_plate = true;
 
 /* [Base] */
+// Width of the soap holder
 base_width = 100; // [500]
+// Depth (front-to-back) of the soap holder
 base_depth = 100; // [500]
+// Total height of the soap holder walls
 base_height = 60; // [500]
 
-wall_thickness = 1.5; // [10]
-
-wall_fillet_radius = 10; // [250]
-assert(wall_fillet_radius <= min(base_width, base_depth)/2, "Wall fillet radius can't be greater than half the smaller base dimension");
-
-/* [Base] [Drainage]*/
-drainage_height = 10; // [50]
-assert(drainage_height <= base_height, "Drainage height can't be greater than base height");
-
+/* TODO: Maybe this can be deleted */
+// Height of the solid bottom layer
 base_layer_height = 2; // [20]
-assert(base_layer_height <= drainage_height, "Base layer height can't be greater than drainage height");
 
-/* [Base] [Drainage spout] */
+// Thickness of the walls
+wall_thickness = 1.5; // [10]
+// Radius of the rounded corners on the base
+wall_fillet_radius = 10; // [250]
+
+// Can't use the [foo] [bar] syntax here because of makerworld.com parser
+/* [Drainage spout] */
+// Width of the front drainage opening
 spout_opening_width = 20; // [100]
-
+// Radius of the rounded corners on the spout
 spout_fillet_radius = 2; // [100]
-
+// How far the spout extends forward from the base
 spout_depth = 4; // [50]
-assert(spout_depth >= wall_thickness + spout_fillet_radius, "Spout depth must be greater than twice the wall thickness");
 
-/* [Plate] */
+/* [Drainage Plate] */
+// Height from the base where the drainage plate sits
+drainage_plate_offset = 10; // [50]
+// Thickness of the drainage plate
 plate_height = 2; // [100]
 
+/* [Drainage Plate Pattern] */
+// Size of each drainage hole
 tile_size = 3; // [10]
+// Gap between drainage holes
 tile_gap = 0.5; // [20]
-pattern_min_margin = 2; // [20]
+// Minimum margin from edges to drainage holes
+tile_min_margin = 2; // [20]
 
 /* [Hidden] */
 epsilon = 0.001;
+
+// Asserts must go after the variables,
+// as makerworld.com won't be able to parse the variable
+// definitions if they are after the asserts.
+assert(wall_fillet_radius <= min(base_width, base_depth)/2, "Wall fillet radius can't be greater than half the smaller base dimension");
+assert(drainage_plate_offset <= base_height, "Drainage height can't be greater than base height");
+assert(base_layer_height <= drainage_plate_offset, "Base layer height can't be greater than drainage height");
+assert(spout_depth >= wall_thickness + spout_fillet_radius, "Spout depth must be greater than twice the wall thickness");
 
 module prism(l, w, h) {
     polyhedron(
@@ -141,7 +160,7 @@ module base_rect () {
 module side_inclined_plane() {
     translate([spout_opening_width/2,base_depth/2,0])
                 rotate([0, 0, 270])
-                    prism(base_depth, base_width/2 - spout_opening_width/2, drainage_height);
+                    prism(base_depth, base_width/2 - spout_opening_width/2, drainage_plate_offset);
 }
 
 module wall_perimeter() { 
@@ -192,10 +211,10 @@ module base() {
             
             // the back inclined plane
             translate([-base_width/2,-base_depth/2,0])
-                    prism(base_width, base_depth, drainage_height);
+                    prism(base_width, base_depth, drainage_plate_offset);
         }
         // Remove everything outside the inner area (leaving wall_thickness)
-        linear_extrude(drainage_height *10)
+        linear_extrude(drainage_plate_offset *10)
             difference() {  
                 offset(50)
                     base_rect();
@@ -257,7 +276,7 @@ module tile_grid(pattern, pitch, cols, rows) {
 
 module plate() {
     // A simple plate with rounded corners
-    translate([0,0,base_layer_height + drainage_height])
+    translate([0,0,base_layer_height + drainage_plate_offset])
         linear_extrude(plate_height)
             difference() {
                 rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=wall_fillet_radius - wall_thickness);
@@ -265,8 +284,8 @@ module plate() {
                 intersection() {
                      // Limit holes to the area within the min margin
                     rect(
-                        [base_width - wall_thickness*2 - pattern_min_margin,
-                        base_depth - wall_thickness*2 - pattern_min_margin],
+                        [base_width - wall_thickness*2 - tile_min_margin,
+                        base_depth - wall_thickness*2 - tile_min_margin],
                         rounding=wall_fillet_radius - wall_thickness);
                     
                     tile_pitch = tile_size + tile_gap;    
