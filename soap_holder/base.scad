@@ -14,8 +14,8 @@ plate_height = 2;
 
 drainage_height = 10;
 
-pattern_unit_size = 5;
-pattern_spacing = 1;
+tile_size = 5;
+tile_gap = 1;
 pattern_min_margin = 2;
 
 spout_length = 2.5;
@@ -129,54 +129,47 @@ module base() {
     }
 }
 
-// drainage hole pattern
-module drainage_hole_pattern(size) {
-    // Create a regular polygon as a 2D shape, inscribed in a circle of diameter 'size'
-    // sides parameter defines the number of sides (3=triangle, 4=square, 6=hexagon, etc.)
-    circle(r=size/2);
+// drainage tile - the repeating element in the drainage pattern
+module drainage_tile(size) {
+    // Renders the basic geometric element that gets repeated in the tiling pattern
+    rotate(90) circle(r=size/2, $fn=6);
 }
 
 // Tiling pattern spacing helpers
 // Returns [x_spacing, y_spacing, row_offset]
 
-function hex_tiling_spacing(unit_size, spacing) = 
-    let(x = unit_size + spacing)
-    [x, x * sqrt(3)/2, x/2];
+function hex_tiling_spacing(pitch) = 
+    [pitch, pitch * sqrt(3)/2, pitch/2];
 
-function square_tiling_spacing(unit_size, spacing) = 
-    let(x = unit_size + spacing)
-    [x, x, 0];
+function square_tiling_spacing(pitch) = 
+    [pitch, pitch, 0];
 
-module create_hole_pattern(pattern="hex") {
+module create_hole_pattern(pattern, pitch, cols, rows) {
     /*
-        This module arranges pattern units (holes) in a grid.
+        This module arranges tiles in a grid.
         
         Parameters:
         - pattern: "hex" for hexagonal (honeycomb) grid,
                    "square" for rectangular grid
+        - pitch: center-to-center distance between tiles
+        - cols: number of columns in the grid
+        - rows: number of rows in the grid
     */
-    plate_width = base_width - wall_thickness*2;
-    plate_depth = base_depth - wall_thickness*2;
-
     // Get spacing based on pattern type
-    spacing = (pattern == "hex") 
-        ? hex_tiling_spacing(pattern_unit_size, pattern_spacing)
-        : square_tiling_spacing(pattern_unit_size, pattern_spacing);
+    spacing_data = (pattern == "hex") 
+        ? hex_tiling_spacing(pitch)
+        : square_tiling_spacing(pitch);
     
-    x_sp = spacing[0];
-    y_sp = spacing[1];
-    row_offset = spacing[2];
+    x_sp = spacing_data[0];
+    y_sp = spacing_data[1];
+    row_offset = spacing_data[2];
 
-    // Compute max number of holes that fit inside the plate with margin
-    pattern_cols = floor((plate_width - pattern_min_margin*2 + pattern_spacing) / x_sp);
-    pattern_rows = floor((plate_depth - pattern_min_margin*2 + pattern_spacing) / y_sp);
+    total_width = (cols - 1) * x_sp;
+    total_height = (rows - 1) * y_sp;
 
-    total_width = (pattern_cols - 1) * x_sp;
-    total_height = (pattern_rows - 1) * y_sp;
-
-    for (j = [0 : pattern_rows - 1]) {
+    for (j = [0 : rows - 1]) {
         y = -total_height/2 + j * y_sp;
-        for (i = [0 : pattern_cols - 1]) {
+        for (i = [0 : cols - 1]) {
             // Apply row offset to alternating rows
             x_offset = (j % 2 == 1) ? row_offset : 0;
             x = -total_width/2 + i * x_sp + x_offset;
@@ -202,8 +195,13 @@ module plate() {
                         base_depth - wall_thickness*2 - pattern_min_margin],
                         rounding=fillet_radius - wall_thickness);
                     
-                    create_hole_pattern("hex")
-                        drainage_hole_pattern(size=pattern_unit_size);
+                    tile_pitch = tile_size + tile_gap;    
+                    create_hole_pattern(
+                        pattern="hex",
+                        pitch=tile_pitch, 
+                        cols=ceil(base_width / tile_pitch) + 2,
+                        rows=ceil(base_depth / tile_pitch) + 2)
+                        drainage_tile(size=tile_size);
                 }
                 
             }
@@ -216,8 +214,6 @@ module soap_holder() {
     //     wall();
     // color("lightgray")
         plate();
-    // create_hole_pattern("hex")
-    //     drainage_hole_pattern(size=pattern_unit_size);
 
 }
 
