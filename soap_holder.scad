@@ -159,69 +159,94 @@ module left_spout_border() {
         );
 }
 
-module base_rect() {
-    rect([base_width, base_depth], rounding=wall_fillet_radius);
+module base_rect(width, depth, fillet) {
+    rect([width, depth], rounding=fillet);
 }
 
-module base_rect_inset() {
+module base_rect_inset(inner_width, inner_depth, inner_fillet) {
     // Inset base by wall_thickness/2 to align with wall centerline and ensure intersection
-    rect([base_inner_width, base_inner_depth], rounding=base_inner_fillet);
+    rect([inner_width, inner_depth], rounding=inner_fillet);
 }
 
-module side_inclined_plane() {
-    translate([spout_opening_width/2, base_inner_depth/2, 0])
+module side_inclined_plane(spout_width, inner_width, inner_depth, drain_offset) {
+    translate([spout_width/2, inner_depth/2, 0])
         rotate([0, 0, 270])
-            prism(base_inner_depth, base_inner_width/2 - spout_opening_width/2, drainage_plate_offset);
+            prism(inner_depth, inner_width/2 - spout_width/2, drain_offset);
 }
 
-module wall_perimeter() {
+module wall_perimeter(inner_width, inner_depth, inner_fillet, spout_width, spout_fillet, spout_depth, wall_thick) {
     // Wall centerline is inset by wall_thickness/2 so the outer edge
     // aligns with the base dimensions
     right_path = turtle(
         [
-            "move", base_inner_width/2 - base_inner_fillet,
-            "arcright", base_inner_fillet, 90,
-            "move", base_inner_depth - base_inner_fillet*2,
-            "arcright", base_inner_fillet, 90,
-            "move", base_inner_width/2 - base_inner_fillet - spout_opening_width/2 - spout_fillet_radius,
-            "arcleft", spout_fillet_radius, 90,
-            "move", spout_depth - spout_fillet_radius - wall_thickness/2,
+            "move", inner_width/2 - inner_fillet,
+            "arcright", inner_fillet, 90,
+            "move", inner_depth - inner_fillet*2,
+            "arcright", inner_fillet, 90,
+            "move", inner_width/2 - inner_fillet - spout_width/2 - spout_fillet,
+            "arcleft", spout_fillet, 90,
+            "move", spout_depth - spout_fillet - wall_thick/2,
         ],
-        [0, base_inner_depth/2]
+        [0, inner_depth/2]
     );
     mirror_copy([1,0,0])
     bumpy_path(
         path=right_path,
-        r_circle=wall_thickness/2
+        r_circle=wall_thick/2
     );
 }
 
-module wall() {
-    linear_extrude(base_height)
-        wall_perimeter();
+module wall(height, inner_width, inner_depth, inner_fillet, spout_width, spout_fillet, spout_depth, wall_thick) {
+    linear_extrude(height)
+        wall_perimeter(
+            inner_width=inner_width,
+            inner_depth=inner_depth,
+            inner_fillet=inner_fillet,
+            spout_width=spout_width,
+            spout_fillet=spout_fillet,
+            spout_depth=spout_depth,
+            wall_thick=wall_thick
+        );
 }
 
-module base() {
-    linear_extrude(base_layer_height)
-        base_rect_inset();
+module base(layer_height, inner_width, inner_depth, inner_fillet, spout_width, drain_offset) {
+    linear_extrude(layer_height)
+        base_rect_inset(
+            inner_width=inner_width,
+            inner_depth=inner_depth,
+            inner_fillet=inner_fillet
+        );
     
     // Add an inclined plane that will help the water drain to the spout
     difference() {
-        translate([0,0,base_layer_height]) {
+        translate([0,0,layer_height]) {
             // The inclined side planes
             mirror_copy([1,0,0])
-                side_inclined_plane();
+                side_inclined_plane(
+                    spout_width=spout_width,
+                    inner_width=inner_width,
+                    inner_depth=inner_depth,
+                    drain_offset=drain_offset
+                );
             
             // The back inclined plane
-            translate([-base_inner_width/2, -base_inner_depth/2, 0])
-                prism(base_inner_width, base_inner_depth, drainage_plate_offset);
+            translate([-inner_width/2, -inner_depth/2, 0])
+                prism(inner_width, inner_depth, drain_offset);
         }
         // Remove everything outside the inner area (leaving wall_thickness)
-        linear_extrude(drainage_plate_offset * 10)
+        linear_extrude(drain_offset * 10)
             difference() {  
                 offset(50)
-                    base_rect_inset();
-                base_rect_inset();
+                    base_rect_inset(
+                        inner_width=inner_width,
+                        inner_depth=inner_depth,
+                        inner_fillet=inner_fillet
+                    );
+                base_rect_inset(
+                    inner_width=inner_width,
+                    inner_depth=inner_depth,
+                    inner_fillet=inner_fillet
+                );
             }
     }
 }
@@ -277,39 +302,94 @@ module tile_grid(pattern, pitch, cols, rows) {
     }
 }
 
-module plate() {
+module plate(layer_height, drain_offset, plate_height, width, depth, wall_thickness, fillet, tile_size, tile_gap, tile_min_margin) {
     // A simple plate with rounded corners
-    translate([0,0,base_layer_height + drainage_plate_offset])
+    translate([0,0,layer_height + drain_offset])
         linear_extrude(plate_height)
             difference() {
-                rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=wall_fillet_radius - wall_thickness);
+                rect([width - wall_thickness*2, depth - wall_thickness*2], rounding=fillet - wall_thickness);
                 
                 intersection() {
                      // Limit holes to the area within the min margin
                     rect(
-                        [base_width - wall_thickness*2 - tile_min_margin,
-                        base_depth - wall_thickness*2 - tile_min_margin],
-                        rounding=wall_fillet_radius - wall_thickness);
+                        [width - wall_thickness*2 - tile_min_margin,
+                        depth - wall_thickness*2 - tile_min_margin],
+                        rounding=fillet - wall_thickness);
                     
                     tile_pitch = tile_size + tile_gap;    
                     tile_grid(
                         pattern="hex",
                         pitch=tile_pitch, 
-                        cols=ceil(base_width / tile_pitch) + 2,
-                        rows=ceil(base_depth / tile_pitch) + 2)
+                        cols=ceil(width / tile_pitch) + 2,
+                        rows=ceil(depth / tile_pitch) + 2)
                         drainage_tile(size=tile_size);
                 }
                 
             }
 }
 
-module soap_holder() {
+module soap_holder(
+    show_base, show_wall, show_plate,
+    base_width, base_depth, base_height, base_layer_height, wall_thickness, wall_fillet_radius,
+    spout_opening_width, spout_fillet_radius, spout_depth,
+    drainage_plate_offset, plate_height,
+    tile_size, tile_gap, tile_min_margin,
+    base_inner_width, base_inner_depth, base_inner_fillet
+) {
     if (show_base) 
-        color("steelblue") base();
+        color("steelblue") base(
+            layer_height=base_layer_height,
+            inner_width=base_inner_width,
+            inner_depth=base_inner_depth,
+            inner_fillet=base_inner_fillet,
+            spout_width=spout_opening_width,
+            drain_offset=drainage_plate_offset
+        );
     if (show_wall) 
-        color("palevioletred") wall();
+        color("palevioletred") wall(
+            height=base_height,
+            inner_width=base_inner_width,
+            inner_depth=base_inner_depth,
+            inner_fillet=base_inner_fillet,
+            spout_width=spout_opening_width,
+            spout_fillet=spout_fillet_radius,
+            spout_depth=spout_depth,
+            wall_thick=wall_thickness
+        );
     if (show_plate) 
-        color("lightgray") plate();
+        color("lightgray") plate(
+            layer_height=base_layer_height,
+            drain_offset=drainage_plate_offset,
+            plate_height=plate_height,
+            width=base_width,
+            depth=base_depth,
+            wall_thickness=wall_thickness,
+            fillet=wall_fillet_radius,
+            tile_size=tile_size,
+            tile_gap=tile_gap,
+            tile_min_margin=tile_min_margin
+        );
 }
 
-soap_holder();
+soap_holder(
+    show_base=show_base,
+    show_wall=show_wall,
+    show_plate=show_plate,
+    base_width=base_width,
+    base_depth=base_depth,
+    base_height=base_height,
+    base_layer_height=base_layer_height,
+    wall_thickness=wall_thickness,
+    wall_fillet_radius=wall_fillet_radius,
+    spout_opening_width=spout_opening_width,
+    spout_fillet_radius=spout_fillet_radius,
+    spout_depth=spout_depth,
+    drainage_plate_offset=drainage_plate_offset,
+    plate_height=plate_height,
+    tile_size=tile_size,
+    tile_gap=tile_gap,
+    tile_min_margin=tile_min_margin,
+    base_inner_width=base_inner_width,
+    base_inner_depth=base_inner_depth,
+    base_inner_fillet=base_inner_fillet
+);
