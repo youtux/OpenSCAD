@@ -37,3 +37,12 @@ When developing SCAD scripts with complex logic:
 - Platform: macOS
 - Shell: zsh (or bash)
 - Standard output handling: Redirect with `>`, `2>&1` for stderr
+
+## Git Workflow
+
+When committing changes to the repository:
+
+1. **Never use `git add -A`** - this can add unwanted files
+2. **Add files individually** using `git add <specific-file>` for each modified file
+3. Review changes with `git status` before committing
+4. Use descriptive commit messages that explain what was changed and why
