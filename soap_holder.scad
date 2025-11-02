@@ -56,6 +56,11 @@ epsilon = 0.001;
 
 $fn = fn;
 
+// Calculated dimensions for base inner area (inset by wall_thickness/2 on each side)
+base_inner_width = base_width - wall_thickness;
+base_inner_depth = base_depth - wall_thickness;
+base_inner_fillet = wall_fillet_radius - wall_thickness / 2;
+
 // Asserts must go after the variables,
 // as makerworld.com won't be able to parse the variable
 // definitions if they are after the asserts.
@@ -155,28 +160,35 @@ module left_spout_border() {
         );
 }
 
-module base_rect () {
+module base_rect() {
     rect([base_width, base_depth], rounding=wall_fillet_radius);
 }
 
-module side_inclined_plane() {
-    translate([spout_opening_width/2,base_depth/2,0])
-                rotate([0, 0, 270])
-                    prism(base_depth, base_width/2 - spout_opening_width/2, drainage_plate_offset);
+module base_rect_inset() {
+    // Inset base by wall_thickness/2 to align with wall centerline and ensure intersection
+    rect([base_inner_width, base_inner_depth], rounding=base_inner_fillet);
 }
 
-module wall_perimeter() { 
+module side_inclined_plane() {
+    translate([spout_opening_width/2, base_inner_depth/2, 0])
+        rotate([0, 0, 270])
+            prism(base_inner_depth, base_inner_width/2 - spout_opening_width/2, drainage_plate_offset);
+}
+
+module wall_perimeter() {
+    // Wall centerline is inset by wall_thickness/2 so the outer edge
+    // aligns with the base dimensions
     right_path = turtle(
         [
-            "move", base_width/2 - wall_fillet_radius,
-            "arcright", wall_fillet_radius, 90,
-            "move", base_depth - wall_fillet_radius*2,
-            "arcright", wall_fillet_radius, 90,
-            "move", base_width/2 - wall_fillet_radius - spout_opening_width/2 - spout_fillet_radius,
+            "move", base_inner_width/2 - base_inner_fillet,
+            "arcright", base_inner_fillet, 90,
+            "move", base_inner_depth - base_inner_fillet*2,
+            "arcright", base_inner_fillet, 90,
+            "move", base_inner_width/2 - base_inner_fillet - spout_opening_width/2 - spout_fillet_radius,
             "arcleft", spout_fillet_radius, 90,
-            "move", spout_depth - spout_fillet_radius,
+            "move", spout_depth - spout_fillet_radius - wall_thickness/2,
         ],
-        [0, base_depth/2]
+        [0, base_inner_depth/2]
     );
     mirror_copy([1,0,0])
     bumpy_path(
@@ -192,35 +204,25 @@ module wall() {
 
 module base() {
     linear_extrude(base_layer_height)
-        base_rect();
+        base_rect_inset();
     
-    // let's add an inclined plane that will help the water drain to the spout
-    // we will want to use a polyhedron for this
-    // we basically want an upside-down pyramid (apex at top, base at bottom)
-
-    bottom_left = [-base_width/2, -base_depth/2, 0];
-    up_left = [-base_width/2, base_depth/2, 0];
-    up_right = [base_width/2, base_depth/2, 0];
-    bottom_right = [base_width/2, -base_depth/2, 0];
-        
-
+    // Add an inclined plane that will help the water drain to the spout
     difference() {
-        // TODO: Not the best looking, but for now it can do
         translate([0,0,base_layer_height]) {
             // The inclined side planes
             mirror_copy([1,0,0])
                 side_inclined_plane();
             
-            // the back inclined plane
-            translate([-base_width/2,-base_depth/2,0])
-                    prism(base_width, base_depth, drainage_plate_offset);
+            // The back inclined plane
+            translate([-base_inner_width/2, -base_inner_depth/2, 0])
+                prism(base_inner_width, base_inner_depth, drainage_plate_offset);
         }
         // Remove everything outside the inner area (leaving wall_thickness)
-        linear_extrude(drainage_plate_offset *10)
+        linear_extrude(drainage_plate_offset * 10)
             difference() {  
                 offset(50)
-                    base_rect();
-                base_rect();
+                    base_rect_inset();
+                base_rect_inset();
             }
     }
 }
