@@ -14,8 +14,8 @@ plate_height = 2;
 
 drainage_height = 10;
 
-tile_size = 5;
-tile_gap = 1;
+tile_size = 3;
+tile_gap = 0.5;
 pattern_min_margin = 2;
 
 spout_length = 2.5;
@@ -182,9 +182,8 @@ module create_hole_pattern(pattern, pitch, cols, rows) {
 
 module plate() {
     // A simple plate with rounded corners
-    
-    linear_extrude(plate_height)
-        translate([0,0,base_layer_height + drainage_height])
+    translate([0,0,base_layer_height + drainage_height])
+        linear_extrude(plate_height)
             difference() {
                 rect([base_width - wall_thickness*2, base_depth - wall_thickness*2], rounding=fillet_radius - wall_thickness);
                 
@@ -212,7 +211,7 @@ module soap_holder() {
     //     base();
     // color("palevioletred")
     //     wall();
-    // color("lightgray")
+    color("lightgray")
         plate();
 
 }
