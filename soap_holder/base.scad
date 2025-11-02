@@ -1,7 +1,8 @@
 include <../libs/round-anything/polyround.scad>; // Include the Round-Anything library
 include <../libs/BOSL2/std.scad>
+include <hex-grid.scad>
 
-$fn=100;
+$fn=10;
 epsilon = 0.001;
 
 base_width = 100; // [500]
@@ -14,7 +15,7 @@ plate_height = 2;
 drainage_height = 10;
 
 pattern_unit_size = 5;
-pattern_spacing = 10;
+pattern_spacing = 1;
 pattern_min_margin = 2;
 
 spout_length = 2.5;
@@ -128,31 +129,57 @@ module base() {
     }
 }
 
+// drainage hole pattern
 module drainage_hole_pattern(size) {
-    // Create a single hole as a 2D shape
+    // Create a regular polygon as a 2D shape, inscribed in a circle of diameter 'size'
+    // sides parameter defines the number of sides (3=triangle, 4=square, 6=hexagon, etc.)
     circle(r=size/2);
 }
 
-module create_hole_pattern() {
-    // Calculate available area inside the plate
+// Tiling pattern spacing helpers
+// Returns [x_spacing, y_spacing, row_offset]
+
+function hex_tiling_spacing(unit_size, spacing) = 
+    let(x = unit_size + spacing)
+    [x, x * sqrt(3)/2, x/2];
+
+function square_tiling_spacing(unit_size, spacing) = 
+    let(x = unit_size + spacing)
+    [x, x, 0];
+
+module create_hole_pattern(pattern="hex") {
+    /*
+        This module arranges pattern units (holes) in a grid.
+        
+        Parameters:
+        - pattern: "hex" for hexagonal (honeycomb) grid,
+                   "square" for rectangular grid
+    */
     plate_width = base_width - wall_thickness*2;
     plate_depth = base_depth - wall_thickness*2;
 
+    // Get spacing based on pattern type
+    spacing = (pattern == "hex") 
+        ? hex_tiling_spacing(pattern_unit_size, pattern_spacing)
+        : square_tiling_spacing(pattern_unit_size, pattern_spacing);
+    
+    x_sp = spacing[0];
+    y_sp = spacing[1];
+    row_offset = spacing[2];
+
     // Compute max number of holes that fit inside the plate with margin
-    pattern_rows = floor((plate_depth - pattern_min_margin*2 + pattern_spacing) / (pattern_unit_size + pattern_spacing));
-    pattern_cols = floor((plate_width - pattern_min_margin*2 + pattern_spacing) / (pattern_unit_size + pattern_spacing));
-    x_spacing = pattern_unit_size + pattern_spacing;
-    y_spacing = pattern_unit_size + pattern_spacing;
+    pattern_cols = floor((plate_width - pattern_min_margin*2 + pattern_spacing) / x_sp);
+    pattern_rows = floor((plate_depth - pattern_min_margin*2 + pattern_spacing) / y_sp);
 
-    // Compute total pattern size
-    total_width = (pattern_cols - 1) * x_spacing;
-    total_height = (pattern_rows - 1) * y_spacing;
+    total_width = (pattern_cols - 1) * x_sp;
+    total_height = (pattern_rows - 1) * y_sp;
 
-    // Center the pattern in the plate area
-    for (i = [0 : pattern_cols - 1]) {
-        for (j = [0 : pattern_rows - 1]) {
-            x = -total_width/2 + i * x_spacing;
-            y = -total_height/2 + j * y_spacing;
+    for (j = [0 : pattern_rows - 1]) {
+        y = -total_height/2 + j * y_sp;
+        for (i = [0 : pattern_cols - 1]) {
+            // Apply row offset to alternating rows
+            x_offset = (j % 2 == 1) ? row_offset : 0;
+            x = -total_width/2 + i * x_sp + x_offset;
             translate([x, y, 0]) {
                 children();
             }
@@ -175,7 +202,7 @@ module plate() {
                         base_depth - wall_thickness*2 - pattern_min_margin],
                         rounding=fillet_radius - wall_thickness);
                     
-                    create_hole_pattern()
+                    create_hole_pattern("hex")
                         drainage_hole_pattern(size=pattern_unit_size);
                 }
                 
@@ -189,6 +216,8 @@ module soap_holder() {
     //     wall();
     // color("lightgray")
         plate();
+    // create_hole_pattern("hex")
+    //     drainage_hole_pattern(size=pattern_unit_size);
 
 }
 
