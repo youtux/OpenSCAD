@@ -144,7 +144,7 @@ function hex_tiling_spacing(pitch) =
 function square_tiling_spacing(pitch) = 
     [pitch, pitch, 0];
 
-module create_hole_pattern(pattern, pitch, cols, rows) {
+module tile_grid(pattern, pitch, cols, rows) {
     /*
         This module arranges tiles in a grid.
         
@@ -195,7 +195,7 @@ module plate() {
                         rounding=fillet_radius - wall_thickness);
                     
                     tile_pitch = tile_size + tile_gap;    
-                    create_hole_pattern(
+                    tile_grid(
                         pattern="hex",
                         pitch=tile_pitch, 
                         cols=ceil(base_width / tile_pitch) + 2,
@@ -207,10 +207,10 @@ module plate() {
 }
 
 module soap_holder() {
-    // color("#4682B4") 
-    //     base();
-    // color("palevioletred")
-    //     wall();
+    color("steelblue") 
+        base();
+    color("palevioletred")
+        wall();
     color("lightgray")
         plate();
 
