@@ -1,9 +1,9 @@
 include <round-anything/polyround.scad>; // Include the Round-Anything library
 include <BOSL2/std.scad>
 
-$fn=10;
-
 /* [Parts to display] */
+// Number of fragments for circle rendering ($fn parameter)
+fn=10;
 // Display the base with drainage slope
 show_base = true;
 // Display the outer walls
@@ -53,6 +53,8 @@ tile_min_margin = 2; // [20]
 
 /* [Hidden] */
 epsilon = 0.001;
+
+$fn = fn;
 
 // Asserts must go after the variables,
 // as makerworld.com won't be able to parse the variable
