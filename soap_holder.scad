@@ -1,6 +1,5 @@
-include <../libs/round-anything/polyround.scad>; // Include the Round-Anything library
-include <../libs/BOSL2/std.scad>
-include <hex-grid.scad>
+include <round-anything/polyround.scad>; // Include the Round-Anything library
+include <BOSL2/std.scad>
 
 $fn=10;
 
