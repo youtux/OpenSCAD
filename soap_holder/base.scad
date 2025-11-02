@@ -2,7 +2,7 @@ include <../libs/round-anything/polyround.scad>; // Include the Round-Anything l
 include <../libs/BOSL2/std.scad>
 include <hex-grid.scad>
 
-$fn=30;
+$fn=10;
 
 /* [Parts to display] */
 show_base = true;
@@ -14,7 +14,7 @@ base_width = 100; // [500]
 base_depth = 100; // [500]
 base_height = 60; // [500]
 
-wall_thickness = 2; // [10]
+wall_thickness = 1.5; // [10]
 
 wall_fillet_radius = 10; // [250]
 assert(wall_fillet_radius <= min(base_width, base_depth)/2, "Wall fillet radius can't be greater than half the smaller base dimension");
@@ -29,11 +29,9 @@ assert(base_layer_height <= drainage_height, "Base layer height can't be greater
 /* [Base] [Drainage spout] */
 spout_opening_width = 20; // [100]
 
+spout_fillet_radius = 2; // [100]
 
-spout_fillet_radius = 0.5; // [100]
-assert(0<= spout_fillet_radius && spout_fillet_radius <= wall_thickness / 2, "Spout fillet radius can't be greater than half the wall thickness");
-
-spout_depth = 2.5; // [50]
+spout_depth = 4; // [50]
 assert(spout_depth >= wall_thickness + spout_fillet_radius, "Spout depth must be greater than twice the wall thickness");
 
 /* [Plate] */
@@ -64,29 +62,67 @@ module prism(l, w, h) {
     );
 }
 
-// Parametric bumpy arc (arc with circles and ring)
-// r_arc: radius of the arc
-// angle_deg: angle of the arc in degrees
-// r_circle: radius of circles placed along the arc
-// ring_width: width of the ring on the inside
-// circle_fn: $fn value for circle resolution
-module bumpy_arc(r_arc, angle_deg, r_circle, ring_width, circle_fn=50) {
-    // Calculate number of circles to fit along arc
-    arc_length = r_arc * (angle_deg * PI / 180);
-    n_circles = ceil(arc_length / (2 * r_circle)) + 1;
+
+// Module: circles_on_path()
+// Synopsis: Places circles continuously along a path at regular intervals.
+// Description:
+//   Places circles at regular intervals along an arbitrary path. The circles are spaced
+//   such that they are touching each other (spacing = 2 * r_circle). This works for any
+//   path shape (arcs, curves, spirals, etc.), as long as the path is continuous.
+//   The function automatically calculates the total path length and distributes circles
+//   evenly along the entire length.
+// Arguments:
+//   path = The path to place circles on. A list of 2D points.
+//   r_circle = Radius of each circle. Default: 1
+//   circle_fn = Number of fragments for circle rendering ($fn parameter). Default: 50
+// Example:
+//   my_path = arc(r=30, n=10, angle=90);
+//   circles_on_path(my_path, r_circle=2, circle_fn=30);
+module circles_on_path(path, r_circle, circle_fn=50) {
+    // Generate cut distances spaced by 2*r_circle along the path
+    path_length = path_length(path);
+    n_cuts = floor(path_length / (2*r_circle));
+    cutdists = [for (i = [0:n_cuts]) i * 2*r_circle];
     
-    // Generate arc path
-    path = arc(r=r_arc, n=n_circles, angle=angle_deg);
-    
-    // Draw circles at each point along the arc
-    for (p = path) {
-        translate(p)
-            circle(r=r_circle, $fn=circle_fn);
+    // Get points at those distances
+    cuts = path_cut_points(path, cutdists, closed=false);
+    // Extract just the points (first element of each cut)
+    for (cut = cuts) {
+        if (cut != undef) {
+            translate(cut[0]){
+                circle(r=r_circle, $fn=circle_fn);
+            }
+        }
     }
-    
-    // Draw ring on the inside
-    region(ring(n=50, r1=r_arc - ring_width, r2=r_arc, angle=angle_deg));
 }
+
+// Module: bumpy_path()
+// Synopsis: Creates a bumpy/studded ring along an arbitrary path.
+// Description:
+//   Combines circles and a ring to create a bumpy, studded appearance along any arbitrary path.
+//   This module draws circles at regular intervals along the path (creating the "bumps") and
+//   also draws a ring-shaped region on the inside edge of the path with a width equal to r_circle.
+//   The ring is created by offsetting the path inward and creating a region between the outer
+//   and inner offset paths. This approach works for any path shape, not just arcs.
+// Arguments:
+//   path = The path to create the bumpy ring on. A list of 2D points.
+//   r_circle = Radius of each circle/bump. The circles are spaced at intervals of 2*r_circle, and the ring width equals r_circle.
+//   circle_fn = Number of fragments for circle rendering ($fn parameter). Default: 50
+// Example:
+//   my_path = arc(r=30, n=10, angle=90);
+//   bumpy_path(my_path, r_circle=2, circle_fn=30);
+module bumpy_path(path, r_circle, circle_fn=50) {
+    // Draw circles at each point along the arc
+    circles_on_path(path=path, r_circle=r_circle, circle_fn=circle_fn);
+
+    // Draw ring on the inside using path offsets
+    // Ring width equals r_circle
+    inner_path = offset(path, delta=-r_circle, closed=false);
+    // Create ring by combining inner path forward and outer path backward
+    ring_path = concat(inner_path, reverse(path));
+    region([ring_path]);
+}
+
 
 module left_spout_border() {
     translate([-wall_thickness, -wall_thickness])
@@ -110,20 +146,23 @@ module side_inclined_plane() {
 }
 
 module wall_perimeter() { 
-    difference(){
-        base_rect();
-
-        offset(-wall_thickness)   
-            base_rect();
-        
-        // The opening for the spout
-        translate([0,-base_depth/2])
-            rect([spout_opening_width + (wall_thickness*4), wall_thickness], anchor=BOTTOM);
-    }
-        // the spout borders
+    right_path = turtle(
+        [
+            "move", base_width/2 - wall_fillet_radius,
+            "arcright", wall_fillet_radius, 90,
+            "move", base_depth - wall_fillet_radius*2,
+            "arcright", wall_fillet_radius, 90,
+            "move", base_width/2 - wall_fillet_radius - spout_opening_width/2 - spout_fillet_radius,
+            "arcleft", spout_fillet_radius, 90,
+            "move", spout_depth - spout_fillet_radius,
+        ],
+        [0, base_depth/2]
+    );
     mirror_copy([1,0,0])
-        translate([-(wall_thickness+spout_opening_width/2), -base_depth/2])
-            left_spout_border();
+    bumpy_path(
+        path=right_path,
+        r_circle=wall_thickness/2
+    );
 }
 
 module wall() {
