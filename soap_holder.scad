@@ -3,70 +3,69 @@ include <BOSL2/std.scad>
 
 /* [Parts to display] */
 // Number of fragments for circle rendering ($fn parameter)
-fn=10;
+fn = 10;
 // Display the base with drainage slope
 show_base = true;
 // Display the outer walls
 show_wall = true;
-// Display the drainage plate with holes
-show_plate = true;
+// Display the drainage grate with holes
+show_grate = true;
 
-/* [Base] */
-// Width of the soap holder
+/* [Base Dimensions] */
+// Width of the soap holder (X-axis)
 base_width = 100; // [500]
-// Depth (front-to-back) of the soap holder
-base_depth = 100; // [500]
-// Total height of the soap holder walls
-base_height = 60; // [500]
+// Length of the soap holder (Y-axis, front-to-back)
+base_length = 100; // [500]
+// Height of the soap holder walls (Z-axis)
+wall_height = 60; // [500]
 
 // Height of the solid bottom layer
-base_layer_height = 2; // [20]
+base_thickness = 2; // [20]
 
+/* [Wall Properties] */
 // Thickness of the walls
 wall_thickness = 1.5; // [10]
-// Radius of the rounded corners on the base
-wall_fillet_radius = 10; // [250]
+// Fillet radius for rounded corners on the base
+base_fillet_radius = 10; // [250]
 
 // Can't use the [foo] [bar] syntax here because of makerworld.com parser
-/* [Drainage spout] */
+/* [Drain Spout] */
 // Width of the front drainage opening
-spout_opening_width = 20; // [100]
-// Radius of the rounded corners on the spout
-spout_fillet_radius = 2; // [100]
-// How far the spout extends forward from the base
-spout_depth = 4; // [50]
+drain_spout_width = 20; // [100]
+// Fillet radius for rounded corners on the drain spout
+drain_spout_fillet_radius = 2; // [100]
+// Depth of the drain spout extension
+drain_spout_depth = 4; // [50]
 
-/* [Drainage Plate] */
-// Height from the base where the drainage plate sits
-drainage_plate_offset = 10; // [50]
-// Thickness of the drainage plate
-plate_height = 2; // [100]
+/* [Drainage Grate] */
+// Height offset from base where the drainage grate sits
+grate_height_offset = 10; // [50]
+// Thickness of the drainage grate
+grate_thickness = 2; // [100]
 
-/* [Drainage Plate Pattern] */
-// Size of each drainage hole
-tile_size = 3; // [10]
-// Gap between drainage holes
-tile_gap = 0.5; // [20]
-// Minimum margin from edges to drainage holes
-tile_min_margin = 2; // [20]
+/* [Drainage Hole Pattern] */
+// Diameter of each drainage hole
+hole_diameter = 3; // [10]
+// Spacing between drainage holes
+hole_spacing = 0.5; // [20]
+// Minimum margin from grate edges to drainage holes
+hole_margin = 2; // [20]
 
 /* [Hidden] */
 epsilon = 0.001;
 
 $fn = fn;
 
-// Calculated dimensions for base inner area (inset by wall_thickness/2 on each side)
-base_inner_width = base_width - wall_thickness;
-base_inner_depth = base_depth - wall_thickness;
-base_inner_fillet = wall_fillet_radius - wall_thickness / 2;
+// Calculated dimensions for inner area (inset by wall_thickness/2 on each side)
+inner_width = base_width - wall_thickness;
+inner_length = base_length - wall_thickness;
+inner_fillet_radius = base_fillet_radius - wall_thickness / 2;
 
-// Asserts must go after the variables,
-// as makerworld.com won't be able to parse the variable
-// definitions if they are after the asserts.
-assert(wall_fillet_radius <= min(base_width, base_depth)/2, "Wall fillet radius can't be greater than half the smaller base dimension");
-assert(drainage_plate_offset <= base_height, "Drainage height can't be greater than base height");
-assert(base_layer_height <= drainage_plate_offset, "Base layer height can't be greater than drainage height");
-assert(spout_depth >= wall_thickness + spout_fillet_radius, "Spout depth must be greater than twice the wall thickness");
+// Validation assertions
+assert(base_fillet_radius <= min(base_width, base_length)/2, "Base fillet radius cannot exceed half the smaller base dimension");
+assert(grate_height_offset <= wall_height, "Grate height offset cannot exceed wall height");
+assert(base_thickness <= grate_height_offset, "Base thickness cannot exceed grate height offset");
+assert(drain_spout_depth >= wall_thickness + drain_spout_fillet_radius, "Drain spout depth must accommodate wall thickness and fillet radius");
 
 module prism(l, w, h) {
     polyhedron(
@@ -159,102 +158,102 @@ module left_spout_border() {
         );
 }
 
-module base_rect(width, depth, fillet) {
-    rect([width, depth], rounding=fillet);
+module base_rect(width, length, fillet_radius) {
+    rect([width, length], rounding=fillet_radius);
 }
 
-module base_rect_inset(inner_width, inner_depth, inner_fillet) {
+module base_rect_inset(inner_width, inner_length, inner_fillet_radius) {
     // Inset base by wall_thickness/2 to align with wall centerline and ensure intersection
-    rect([inner_width, inner_depth], rounding=inner_fillet);
+    rect([inner_width, inner_length], rounding=inner_fillet_radius);
 }
 
-module side_inclined_plane(spout_width, inner_width, inner_depth, drain_offset) {
-    translate([spout_width/2, inner_depth/2, 0])
+module side_inclined_plane(spout_width, inner_width, inner_length, height_offset) {
+    translate([spout_width/2, inner_length/2, 0])
         rotate([0, 0, 270])
-            prism(inner_depth, inner_width/2 - spout_width/2, drain_offset);
+            prism(inner_length, inner_width/2 - spout_width/2, height_offset);
 }
 
-module wall_perimeter(inner_width, inner_depth, inner_fillet, spout_width, spout_fillet, spout_depth, wall_thick) {
+module wall_perimeter(inner_width, inner_length, inner_fillet_radius, spout_width, spout_fillet_radius, spout_depth, wall_thickness) {
     // Wall centerline is inset by wall_thickness/2 so the outer edge
     // aligns with the base dimensions
     right_path = turtle(
         [
-            "move", inner_width/2 - inner_fillet,
-            "arcright", inner_fillet, 90,
-            "move", inner_depth - inner_fillet*2,
-            "arcright", inner_fillet, 90,
-            "move", inner_width/2 - inner_fillet - spout_width/2 - spout_fillet,
-            "arcleft", spout_fillet, 90,
-            "move", spout_depth - spout_fillet - wall_thick/2,
+            "move", inner_width/2 - inner_fillet_radius,
+            "arcright", inner_fillet_radius, 90,
+            "move", inner_length - inner_fillet_radius*2,
+            "arcright", inner_fillet_radius, 90,
+            "move", inner_width/2 - inner_fillet_radius - spout_width/2 - spout_fillet_radius,
+            "arcleft", spout_fillet_radius, 90,
+            "move", spout_depth - spout_fillet_radius - wall_thickness/2,
         ],
-        [0, inner_depth/2]
+        [0, inner_length/2]
     );
     mirror_copy([1,0,0])
     bumpy_path(
         path=right_path,
-        r_circle=wall_thick/2
+        r_circle=wall_thickness/2
     );
 }
 
-module wall(height, inner_width, inner_depth, inner_fillet, spout_width, spout_fillet, spout_depth, wall_thick) {
-    linear_extrude(height)
+module wall(wall_height, inner_width, inner_length, inner_fillet_radius, spout_width, spout_fillet_radius, spout_depth, wall_thickness) {
+    linear_extrude(wall_height)
         wall_perimeter(
             inner_width=inner_width,
-            inner_depth=inner_depth,
-            inner_fillet=inner_fillet,
+            inner_length=inner_length,
+            inner_fillet_radius=inner_fillet_radius,
             spout_width=spout_width,
-            spout_fillet=spout_fillet,
+            spout_fillet_radius=spout_fillet_radius,
             spout_depth=spout_depth,
-            wall_thick=wall_thick
+            wall_thickness=wall_thickness
         );
 }
 
-module base(layer_height, inner_width, inner_depth, inner_fillet, spout_width, drain_offset) {
-    linear_extrude(layer_height)
+module base(base_thickness, inner_width, inner_length, inner_fillet_radius, spout_width, grate_height_offset) {
+    linear_extrude(base_thickness)
         base_rect_inset(
             inner_width=inner_width,
-            inner_depth=inner_depth,
-            inner_fillet=inner_fillet
+            inner_length=inner_length,
+            inner_fillet_radius=inner_fillet_radius
         );
     
-    // Add an inclined plane that will help the water drain to the spout
+    // Add inclined planes to help water drain to the spout
     difference() {
-        translate([0,0,layer_height]) {
+        translate([0,0,base_thickness]) {
             // The inclined side planes
             mirror_copy([1,0,0])
                 side_inclined_plane(
                     spout_width=spout_width,
                     inner_width=inner_width,
-                    inner_depth=inner_depth,
-                    drain_offset=drain_offset
+                    inner_length=inner_length,
+                    height_offset=grate_height_offset
                 );
             
             // The back inclined plane
-            translate([-inner_width/2, -inner_depth/2, 0])
-                prism(inner_width, inner_depth, drain_offset);
+            translate([-inner_width/2, -inner_length/2, 0])
+                prism(inner_width, inner_length, grate_height_offset);
         }
         // Remove everything outside the inner area (leaving wall_thickness)
-        linear_extrude(drain_offset * 10)
+        linear_extrude(grate_height_offset * 10)
             difference() {  
                 offset(50)
                     base_rect_inset(
                         inner_width=inner_width,
-                        inner_depth=inner_depth,
-                        inner_fillet=inner_fillet
+                        inner_length=inner_length,
+                        inner_fillet_radius=inner_fillet_radius
                     );
                 base_rect_inset(
                     inner_width=inner_width,
-                    inner_depth=inner_depth,
-                    inner_fillet=inner_fillet
+                    inner_length=inner_length,
+                    inner_fillet_radius=inner_fillet_radius
                 );
             }
     }
 }
 
-// drainage tile - the repeating element in the drainage pattern
-module drainage_tile(size) {
-    // Renders the basic geometric element that gets repeated in the tiling pattern
-    rotate(90) circle(r=size/2, $fn=6);
+// Drainage hole - the repeating element in the drainage pattern
+module drainage_hole(diameter) {
+    // Renders a hexagonal hole for the drainage grate
+    rotate(90) circle(r=diameter/2, $fn=6);
 }
 
 // Tiling pattern spacing helpers
@@ -302,94 +301,94 @@ module tile_grid(pattern, pitch, cols, rows) {
     }
 }
 
-module plate(layer_height, drain_offset, plate_height, width, depth, wall_thickness, fillet, tile_size, tile_gap, tile_min_margin) {
-    // A simple plate with rounded corners
-    translate([0,0,layer_height + drain_offset])
-        linear_extrude(plate_height)
+module drainage_grate(base_thickness, grate_height_offset, grate_thickness, width, length, wall_thickness, fillet_radius, hole_diameter, hole_spacing, hole_margin) {
+    // Drainage grate with hexagonal hole pattern
+    translate([0,0,base_thickness + grate_height_offset])
+        linear_extrude(grate_thickness)
             difference() {
-                rect([width - wall_thickness*2, depth - wall_thickness*2], rounding=fillet - wall_thickness);
+                rect([width - wall_thickness*2, length - wall_thickness*2], rounding=fillet_radius - wall_thickness);
                 
                 intersection() {
-                     // Limit holes to the area within the min margin
+                     // Limit holes to the area within the minimum margin
                     rect(
-                        [width - wall_thickness*2 - tile_min_margin,
-                        depth - wall_thickness*2 - tile_min_margin],
-                        rounding=fillet - wall_thickness);
+                        [width - wall_thickness*2 - hole_margin,
+                        length - wall_thickness*2 - hole_margin],
+                        rounding=fillet_radius - wall_thickness);
                     
-                    tile_pitch = tile_size + tile_gap;    
+                    hole_pitch = hole_diameter + hole_spacing;    
                     tile_grid(
                         pattern="hex",
-                        pitch=tile_pitch, 
-                        cols=ceil(width / tile_pitch) + 2,
-                        rows=ceil(depth / tile_pitch) + 2)
-                        drainage_tile(size=tile_size);
+                        pitch=hole_pitch, 
+                        cols=ceil(width / hole_pitch) + 2,
+                        rows=ceil(length / hole_pitch) + 2)
+                        drainage_hole(diameter=hole_diameter);
                 }
                 
             }
 }
 
 module soap_holder(
-    show_base, show_wall, show_plate,
-    base_width, base_depth, base_height, base_layer_height, wall_thickness, wall_fillet_radius,
-    spout_opening_width, spout_fillet_radius, spout_depth,
-    drainage_plate_offset, plate_height,
-    tile_size, tile_gap, tile_min_margin,
-    base_inner_width, base_inner_depth, base_inner_fillet
+    show_base, show_wall, show_grate,
+    base_width, base_length, wall_height, base_thickness, wall_thickness, base_fillet_radius,
+    drain_spout_width, drain_spout_fillet_radius, drain_spout_depth,
+    grate_height_offset, grate_thickness,
+    hole_diameter, hole_spacing, hole_margin,
+    inner_width, inner_length, inner_fillet_radius
 ) {
     if (show_base) 
         color("steelblue") base(
-            layer_height=base_layer_height,
-            inner_width=base_inner_width,
-            inner_depth=base_inner_depth,
-            inner_fillet=base_inner_fillet,
-            spout_width=spout_opening_width,
-            drain_offset=drainage_plate_offset
+            base_thickness=base_thickness,
+            inner_width=inner_width,
+            inner_length=inner_length,
+            inner_fillet_radius=inner_fillet_radius,
+            spout_width=drain_spout_width,
+            grate_height_offset=grate_height_offset
         );
     if (show_wall) 
         color("palevioletred") wall(
-            height=base_height,
-            inner_width=base_inner_width,
-            inner_depth=base_inner_depth,
-            inner_fillet=base_inner_fillet,
-            spout_width=spout_opening_width,
-            spout_fillet=spout_fillet_radius,
-            spout_depth=spout_depth,
-            wall_thick=wall_thickness
+            wall_height=wall_height,
+            inner_width=inner_width,
+            inner_length=inner_length,
+            inner_fillet_radius=inner_fillet_radius,
+            spout_width=drain_spout_width,
+            spout_fillet_radius=drain_spout_fillet_radius,
+            spout_depth=drain_spout_depth,
+            wall_thickness=wall_thickness
         );
-    if (show_plate) 
-        color("lightgray") plate(
-            layer_height=base_layer_height,
-            drain_offset=drainage_plate_offset,
-            plate_height=plate_height,
+    if (show_grate) 
+        color("lightgray") drainage_grate(
+            base_thickness=base_thickness,
+            grate_height_offset=grate_height_offset,
+            grate_thickness=grate_thickness,
             width=base_width,
-            depth=base_depth,
+            length=base_length,
             wall_thickness=wall_thickness,
-            fillet=wall_fillet_radius,
-            tile_size=tile_size,
-            tile_gap=tile_gap,
-            tile_min_margin=tile_min_margin
+            fillet_radius=base_fillet_radius,
+            hole_diameter=hole_diameter,
+            hole_spacing=hole_spacing,
+            hole_margin=hole_margin
         );
 }
 
 soap_holder(
     show_base=show_base,
     show_wall=show_wall,
-    show_plate=show_plate,
+    show_grate=show_grate,
     base_width=base_width,
-    base_depth=base_depth,
-    base_height=base_height,
-    base_layer_height=base_layer_height,
+    base_length=base_length,
+    wall_height=wall_height,
+    base_thickness=base_thickness,
     wall_thickness=wall_thickness,
-    wall_fillet_radius=wall_fillet_radius,
-    spout_opening_width=spout_opening_width,
-    spout_fillet_radius=spout_fillet_radius,
-    spout_depth=spout_depth,
-    drainage_plate_offset=drainage_plate_offset,
-    plate_height=plate_height,
-    tile_size=tile_size,
-    tile_gap=tile_gap,
-    tile_min_margin=tile_min_margin,
-    base_inner_width=base_inner_width,
-    base_inner_depth=base_inner_depth,
-    base_inner_fillet=base_inner_fillet
+    base_fillet_radius=base_fillet_radius,
+    drain_spout_width=drain_spout_width,
+    drain_spout_fillet_radius=drain_spout_fillet_radius,
+    drain_spout_depth=drain_spout_depth,
+    grate_height_offset=grate_height_offset,
+    grate_thickness=grate_thickness,
+    hole_diameter=hole_diameter,
+    hole_spacing=hole_spacing,
+    hole_margin=hole_margin,
+    inner_width=inner_width,
+    inner_length=inner_length,
+    inner_fillet_radius=inner_fillet_radius
 );
