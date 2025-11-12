@@ -251,9 +251,9 @@ module base(base_thickness, inner_width, inner_length, inner_fillet_radius, spou
 }
 
 // Drainage hole - the repeating element in the drainage pattern
-module drainage_hole(diameter) {
+module drainage_hole(diameter, rotation, sides) {
     // Renders a hexagonal hole for the drainage grate
-    rotate(90) circle(r=diameter/2, $fn=6);
+    rotate(rotation) circle(r=diameter/2, $fn=sides);
 }
 
 // Tiling pattern spacing helpers
@@ -265,7 +265,7 @@ function hex_tiling_spacing(pitch) =
 function square_tiling_spacing(pitch) = 
     [pitch, pitch, 0];
 
-module tile_grid(pattern, pitch, cols, rows) {
+module tile_grid(pattern, pitch, width, length) {
     /*
         This module arranges tiles in a grid.
         
@@ -273,17 +273,24 @@ module tile_grid(pattern, pitch, cols, rows) {
         - pattern: "hex" for hexagonal (honeycomb) grid,
                    "square" for rectangular grid
         - pitch: center-to-center distance between tiles
-        - cols: number of columns in the grid
-        - rows: number of rows in the grid
+        - width: total width of the area to fill
+        - length: total length of the area to fill
     */
     // Get spacing based on pattern type
+    echo(pitch=pitch);
     spacing_data = (pattern == "hex") 
         ? hex_tiling_spacing(pitch)
         : square_tiling_spacing(pitch);
     
+    echo(spacing_data=spacing_data);
+    
     x_sp = spacing_data[0];
     y_sp = spacing_data[1];
     row_offset = spacing_data[2];
+
+    // Calculate number of columns and rows needed to cover the area
+    cols = ceil(width / x_sp);
+    rows = ceil(length / y_sp);
 
     total_width = (cols - 1) * x_sp;
     total_height = (rows - 1) * y_sp;
@@ -294,6 +301,7 @@ module tile_grid(pattern, pitch, cols, rows) {
             // Apply row offset to alternating rows
             x_offset = (j % 2 == 1) ? row_offset : 0;
             x = -total_width/2 + i * x_sp + x_offset;
+
             translate([x, y, 0]) {
                 children();
             }
@@ -302,26 +310,41 @@ module tile_grid(pattern, pitch, cols, rows) {
 }
 
 module drainage_grate(base_thickness, grate_height_offset, grate_thickness, width, length, wall_thickness, fillet_radius, hole_diameter, hole_spacing, hole_margin) {
+    // Limit holes to the area within the minimum margin
+    hole_area_width = width - wall_thickness*2 - hole_margin;
+    hole_area_length = length - wall_thickness*2 - hole_margin;
+    
+    hole_pitch = hole_diameter + hole_spacing;
+
     // Drainage grate with hexagonal hole pattern
     translate([0,0,base_thickness + grate_height_offset])
         linear_extrude(grate_thickness)
             difference() {
+                // Grate outer area
                 rect([width - wall_thickness*2, length - wall_thickness*2], rounding=fillet_radius - wall_thickness);
                 
+                // Limit holes to the area within the minimum margin
                 intersection() {
-                     // Limit holes to the area within the minimum margin
+                    // Grate inner area for holes to fit within the margin
                     rect(
-                        [width - wall_thickness*2 - hole_margin,
-                        length - wall_thickness*2 - hole_margin],
-                        rounding=fillet_radius - wall_thickness);
-                    
-                    hole_pitch = hole_diameter + hole_spacing;    
+                        [hole_area_width, hole_area_length],
+                        rounding=fillet_radius - wall_thickness
+                    );
+    
+                    // The oversized hole pattern grid
                     tile_grid(
                         pattern="hex",
-                        pitch=hole_pitch, 
-                        cols=ceil(width / hole_pitch) + 2,
-                        rows=ceil(length / hole_pitch) + 2)
-                        drainage_hole(diameter=hole_diameter);
+                        pitch=hole_pitch,
+                        width=hole_area_width,
+                        length=hole_area_length
+                    ) {
+                        // Hex drainage hole
+                        drainage_hole(
+                            diameter=hole_diameter,
+                            rotation=90,
+                            sides=6
+                        );
+                    }
                 }
                 
             }
