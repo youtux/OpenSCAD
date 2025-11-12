@@ -20,7 +20,7 @@ base_length = 100; // [500]
 wall_height = 60; // [500]
 
 // Height of the solid bottom layer
-base_thickness = 2; // [20]
+base_thickness = 10; // [20]
 
 /* [Wall Properties] */
 // Thickness of the walls
@@ -29,13 +29,12 @@ wall_thickness = 1.5; // [10]
 base_fillet_radius = 10; // [250]
 
 // Can't use the [foo] [bar] syntax here because of makerworld.com parser
-/* [Drain Spout] */
-// Width of the front drainage opening
-drain_spout_width = 20; // [100]
-// Fillet radius for rounded corners on the drain spout
-drain_spout_fillet_radius = 2; // [100]
-// Depth of the drain spout extension
-drain_spout_depth = 4; // [50]
+
+/* [Spout Outlet Hole] */
+// Center height of the spout outlet hole from the base
+drain_spout_outlet_height = 10; // [500]
+// Diameter of the circular spout outlet hole
+drain_spout_outlet_diameter = 10; // [100]
 
 /* [Drainage Grate] */
 // Height offset from base where the drainage grate sits
@@ -65,7 +64,9 @@ inner_fillet_radius = base_fillet_radius - wall_thickness / 2;
 assert(base_fillet_radius <= min(base_width, base_length)/2, "Base fillet radius cannot exceed half the smaller base dimension");
 assert(grate_height_offset <= wall_height, "Grate height offset cannot exceed wall height");
 assert(base_thickness <= grate_height_offset, "Base thickness cannot exceed grate height offset");
-assert(drain_spout_depth >= wall_thickness + drain_spout_fillet_radius, "Drain spout depth must accommodate wall thickness and fillet radius");
+// removed: assert on drain_spout_depth and drain_spout_fillet_radius (obsolete after removing wall opening)
+assert(drain_spout_outlet_height >= 0 && drain_spout_outlet_height <= wall_height, "Spout outlet hole height must be within wall height");
+assert(drain_spout_outlet_diameter > 0 && drain_spout_outlet_diameter <= inner_width, "Spout outlet hole diameter must be positive and fit within inner width");
 
 module prism(l, w, h) {
     polyhedron(
@@ -83,6 +84,14 @@ module prism(l, w, h) {
         [3,2,5]],
         convexity=5
     );
+}
+
+
+module annulus(r_outer, r_inner, angle=360) {
+    difference() {
+        arc(r=r_outer, angle=angle, $fn=100);
+        arc(r=r_inner, angle=angle, $fn=100);
+    }
 }
 
 
@@ -147,16 +156,7 @@ module bumpy_path(path, r_circle, circle_fn=50) {
 }
 
 
-module left_spout_border() {
-    translate([-wall_thickness, -wall_thickness])
-        ring(32,r=wall_thickness, ring_width=wall_thickness, angle=90);
-    translate([0, -wall_thickness])
-        rect(
-            [wall_thickness, spout_depth - wall_thickness],
-            anchor=TOP+LEFT,
-            rounding=[0,0,spout_fillet_radius,spout_fillet_radius]
-        );
-}
+// removed: left_spout_border() helper (obsolete with enclosed wall design)
 
 module base_rect(width, length, fillet_radius) {
     rect([width, length], rounding=fillet_radius);
@@ -167,13 +167,13 @@ module base_rect_inset(inner_width, inner_length, inner_fillet_radius) {
     rect([inner_width, inner_length], rounding=inner_fillet_radius);
 }
 
-module side_inclined_plane(spout_width, inner_width, inner_length, height_offset) {
-    translate([spout_width/2, inner_length/2, 0])
+module side_inclined_plane(channel_width, inner_width, inner_length, height_offset) {
+    translate([channel_width/2, inner_length/2, 0])
         rotate([0, 0, 270])
-            prism(inner_length, inner_width/2 - spout_width/2, height_offset);
+            prism(inner_length, inner_width/2 - channel_width/2, height_offset);
 }
 
-module wall_perimeter(inner_width, inner_length, inner_fillet_radius, spout_width, spout_fillet_radius, spout_depth, wall_thickness) {
+module wall_perimeter(inner_width, inner_length, inner_fillet_radius, wall_thickness) {
     // Wall centerline is inset by wall_thickness/2 so the outer edge
     // aligns with the base dimensions
     right_path = turtle(
@@ -182,33 +182,79 @@ module wall_perimeter(inner_width, inner_length, inner_fillet_radius, spout_widt
             "arcright", inner_fillet_radius, 90,
             "move", inner_length - inner_fillet_radius*2,
             "arcright", inner_fillet_radius, 90,
-            "move", inner_width/2 - inner_fillet_radius - spout_width/2 - spout_fillet_radius,
-            "arcleft", spout_fillet_radius, 90,
-            "move", spout_depth - spout_fillet_radius - wall_thickness/2,
+            "move", inner_width/2 - inner_fillet_radius
         ],
         [0, inner_length/2]
     );
-    mirror_copy([1,0,0])
-    bumpy_path(
-        path=right_path,
-        r_circle=wall_thickness/2
-    );
-}
-
-module wall(wall_height, inner_width, inner_length, inner_fillet_radius, spout_width, spout_fillet_radius, spout_depth, wall_thickness) {
-    linear_extrude(wall_height)
-        wall_perimeter(
-            inner_width=inner_width,
-            inner_length=inner_length,
-            inner_fillet_radius=inner_fillet_radius,
-            spout_width=spout_width,
-            spout_fillet_radius=spout_fillet_radius,
-            spout_depth=spout_depth,
-            wall_thickness=wall_thickness
+    mirror_copy([1,0,0]) {
+        bumpy_path(
+            path=right_path,
+            r_circle=wall_thickness/2
         );
+    }
 }
 
-module base(base_thickness, inner_width, inner_length, inner_fillet_radius, spout_width, grate_height_offset) {
+module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, spout_outlet_height, spout_outlet_diameter) {
+    difference() {
+        linear_extrude(wall_height) {
+            wall_perimeter(
+                inner_width=inner_width,
+                inner_length=inner_length,
+                inner_fillet_radius=inner_fillet_radius,
+                wall_thickness=wall_thickness
+            );
+        }
+        
+        // Create a round hole on the wall for the spout exit
+        translate([0, -inner_length/2 + wall_thickness / 2 + epsilon, spout_outlet_height])
+            rotate([90, 0, 0])
+                linear_extrude(wall_thickness + 2*epsilon)
+                    circle(r=spout_outlet_diameter/2, $fn=100);
+    }
+
+    // TODO: Refactor this to its own module (this is the spout outlet "coppo" shape)
+    translate([
+        0, 
+        -inner_length/2 + wall_thickness / 2, 
+        spout_outlet_height 
+    ]) {
+        // TODO: 22.5 should become a parameter
+        rotate([-90 + 22.5, 0]) {
+            translate([0, spout_outlet_diameter/2, -10]) {
+                difference() {
+                    // TODO: 10 should become a parameter
+                    linear_extrude(10){
+                        translate([0, -spout_outlet_diameter/2, 0]) {
+                            annulus(
+                                r_outer=spout_outlet_diameter/2,
+                                r_inner=spout_outlet_diameter/2 - wall_thickness,
+                                angle=180
+                            );
+                        }
+                    }
+
+                    // TODO: 30 should become a parameter
+                    translate([-30/2, -spout_outlet_diameter/2, 0])
+                    rotate([90, 180, 90])
+                        linear_extrude(30)
+                        translate([-spout_outlet_diameter/2,  -spout_outlet_diameter/2, 0])
+                            difference() {
+                                square(spout_outlet_diameter/2);
+                                arc(
+                                    r=spout_outlet_diameter/2,
+                                    angle=90,
+                                    wedge=true,
+                                    $fn=100
+                                );
+                            }
+                }
+            }
+        }
+    }
+    
+}
+
+module base(base_thickness, inner_width, inner_length, inner_fillet_radius, channel_width, grate_height_offset) {
     linear_extrude(base_thickness)
         base_rect_inset(
             inner_width=inner_width,
@@ -222,7 +268,7 @@ module base(base_thickness, inner_width, inner_length, inner_fillet_radius, spou
             // The inclined side planes
             mirror_copy([1,0,0])
                 side_inclined_plane(
-                    spout_width=spout_width,
+                    channel_width=channel_width,
                     inner_width=inner_width,
                     inner_length=inner_length,
                     height_offset=grate_height_offset
@@ -353,7 +399,7 @@ module drainage_grate(base_thickness, grate_height_offset, grate_thickness, widt
 module soap_holder(
     show_base, show_wall, show_grate,
     base_width, base_length, wall_height, base_thickness, wall_thickness, base_fillet_radius,
-    drain_spout_width, drain_spout_fillet_radius, drain_spout_depth,
+    drain_spout_outlet_height, drain_spout_outlet_diameter,
     grate_height_offset, grate_thickness,
     hole_diameter, hole_spacing, hole_margin,
     inner_width, inner_length, inner_fillet_radius
@@ -364,7 +410,7 @@ module soap_holder(
             inner_width=inner_width,
             inner_length=inner_length,
             inner_fillet_radius=inner_fillet_radius,
-            spout_width=drain_spout_width,
+            channel_width=drain_spout_outlet_diameter,
             grate_height_offset=grate_height_offset
         );
     if (show_wall) 
@@ -373,10 +419,9 @@ module soap_holder(
             inner_width=inner_width,
             inner_length=inner_length,
             inner_fillet_radius=inner_fillet_radius,
-            spout_width=drain_spout_width,
-            spout_fillet_radius=drain_spout_fillet_radius,
-            spout_depth=drain_spout_depth,
-            wall_thickness=wall_thickness
+            wall_thickness=wall_thickness,
+            spout_outlet_height=drain_spout_outlet_height,
+            spout_outlet_diameter=drain_spout_outlet_diameter
         );
     if (show_grate) 
         color("lightgray") drainage_grate(
@@ -403,9 +448,8 @@ soap_holder(
     base_thickness=base_thickness,
     wall_thickness=wall_thickness,
     base_fillet_radius=base_fillet_radius,
-    drain_spout_width=drain_spout_width,
-    drain_spout_fillet_radius=drain_spout_fillet_radius,
-    drain_spout_depth=drain_spout_depth,
+    drain_spout_outlet_height=drain_spout_outlet_height,
+    drain_spout_outlet_diameter=drain_spout_outlet_diameter,
     grate_height_offset=grate_height_offset,
     grate_thickness=grate_thickness,
     hole_diameter=hole_diameter,
