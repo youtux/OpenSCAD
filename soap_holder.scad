@@ -21,8 +21,8 @@ base_length = 100; // [500]
 // Height of the soap holder walls (Z-axis)
 wall_height = 60; // [500]
 
-// Height of the solid bottom layer
-base_thickness = 3; // [20]
+// Height of the drainage level (base thickness and spout center height)
+drainage_height = 3; // [20]
 
 /* [Wall Properties] */
 // Thickness of the walls
@@ -33,8 +33,6 @@ base_fillet_radius = 10; // [250]
 // Can't use the [foo] [bar] syntax here because of makerworld.com parser
 
 /* [Drainage Spout] */
-// Center height of the spout from the base
-drain_spout_height = 3.5; // [500]
 // Width of the drainage spout opening
 drain_spout_width = 15; // [100]
 // Initial height of the spout at the inlet (where it connects to the wall)
@@ -50,7 +48,7 @@ drain_spout_lean_angle = 15; // [15]
 
 /* [Drainage Grate] */
 // Height offset from base where the drainage grate sits
-grate_height_offset = 3; // [50]
+grate_height_offset = 5; // [50]
 // Thickness of the drainage grate
 grate_thickness = 2; // [100]
 
@@ -74,10 +72,11 @@ inner_fillet_radius = base_fillet_radius - wall_thickness / 2;
 
 // Validation assertions
 assert(base_fillet_radius <= min(base_width, base_length)/2, "Base fillet radius cannot exceed half the smaller base dimension");
+assert(drainage_height <= wall_height, "Drainage height cannot exceed wall height");
+assert(drainage_height >= 0, "Drainage height must be non-negative");
 assert(grate_height_offset <= wall_height, "Grate height offset cannot exceed wall height");
-assert(base_thickness <= grate_height_offset, "Base thickness cannot exceed grate height offset");
+assert(drainage_height <= grate_height_offset, "Drainage height cannot exceed grate height offset");
 // removed: assert on drain_spout_depth and drain_spout_fillet_radius (obsolete after removing wall opening)
-assert(drain_spout_height >= 0 && drain_spout_height <= wall_height, "Spout height must be within wall height");
 assert(drain_spout_width > 0 && drain_spout_width <= inner_width, "Spout width must be positive and fit within inner width");
 assert(drain_spout_inlet_height > 0, "Spout inlet height must be positive");
 assert(drain_spout_outlet_height > 0, "Spout outlet height must be positive");
@@ -305,7 +304,7 @@ module wall_perimeter(inner_width, inner_length, inner_fillet_radius, wall_thick
     }
 }
 
-module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, drain_spout_height, drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle) {
+module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, drainage_height, drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle) {
     difference() {
         linear_extrude(wall_height) {
             wall_perimeter(
@@ -321,7 +320,7 @@ module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_th
         // make a convex hull of the spout inlet shape extruded through the wall thickness.
         
         // Create a round hole on the wall for the spout exit
-        translate([0, -inner_length/2 + wall_thickness / 2 + epsilon, drain_spout_height])
+        translate([0, -inner_length/2 + wall_thickness / 2 + epsilon, drainage_height])
             cyl(
                 h=wall_thickness + 2*epsilon,
                 r=drain_spout_width/2,
@@ -334,7 +333,7 @@ module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_th
     translate([
         0, 
         -inner_length/2 + wall_thickness/2, 
-        drain_spout_height
+        drainage_height
     ])
         rotate([90, 0, 0])
             drainage_spout(
@@ -348,8 +347,8 @@ module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_th
             );    
 }
 
-module base(base_thickness, inner_width, inner_length, inner_fillet_radius, channel_width, grate_height_offset) {
-    linear_extrude(base_thickness)
+module base(drainage_height, inner_width, inner_length, inner_fillet_radius, channel_width, grate_height_offset) {
+    linear_extrude(drainage_height)
         base_rect_inset(
             inner_width=inner_width,
             inner_length=inner_length,
@@ -358,7 +357,7 @@ module base(base_thickness, inner_width, inner_length, inner_fillet_radius, chan
     
     // Add inclined planes to help water drain to the spout
     difference() {
-        translate([0,0,base_thickness]) {
+        translate([0,0,drainage_height]) {
             // The inclined side planes
             mirror_copy([1,0,0])
                 side_inclined_plane(
@@ -446,7 +445,7 @@ module tile_grid(pattern, pitch, width, length) {
     }
 }
 
-module drainage_grate(base_thickness, grate_height_offset, grate_thickness, width, length, wall_thickness, fillet_radius, hole_diameter, hole_spacing, hole_margin) {
+module drainage_grate(drainage_height, grate_height_offset, grate_thickness, width, length, wall_thickness, fillet_radius, hole_diameter, hole_spacing, hole_margin) {
     // Limit holes to the area within the minimum margin
     hole_area_width = width - wall_thickness*2 - hole_margin;
     hole_area_length = length - wall_thickness*2 - hole_margin;
@@ -454,7 +453,7 @@ module drainage_grate(base_thickness, grate_height_offset, grate_thickness, widt
     hole_pitch = hole_diameter + hole_spacing;
 
     // Drainage grate with hexagonal hole pattern
-    translate([0,0,base_thickness + grate_height_offset])
+    translate([0,0,drainage_height + grate_height_offset])
         linear_extrude(grate_thickness)
             difference() {
                 // Grate outer area
@@ -489,15 +488,15 @@ module drainage_grate(base_thickness, grate_height_offset, grate_thickness, widt
 
 module soap_holder(
     show_base, show_wall, show_grate,
-    base_width, base_length, wall_height, base_thickness, wall_thickness, base_fillet_radius,
-    drain_spout_height, drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle,
+    base_width, base_length, wall_height, drainage_height, wall_thickness, base_fillet_radius,
+    drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle,
     grate_height_offset, grate_thickness,
     hole_diameter, hole_spacing, hole_margin,
     inner_width, inner_length, inner_fillet_radius
 ) {
     if (show_base) 
         color("steelblue") base(
-            base_thickness=base_thickness,
+            drainage_height=drainage_height,
             inner_width=inner_width,
             inner_length=inner_length,
             inner_fillet_radius=inner_fillet_radius,
@@ -511,7 +510,7 @@ module soap_holder(
             inner_length=inner_length,
             inner_fillet_radius=inner_fillet_radius,
             wall_thickness=wall_thickness,
-            drain_spout_height=drain_spout_height,
+            drainage_height=drainage_height,
             drain_spout_width=drain_spout_width,
             drain_spout_inlet_height=drain_spout_inlet_height,
             drain_spout_radius=drain_spout_radius,
@@ -521,7 +520,7 @@ module soap_holder(
         );
     if (show_grate) 
         color("lightgray") drainage_grate(
-            base_thickness=base_thickness,
+            drainage_height=drainage_height,
             grate_height_offset=grate_height_offset,
             grate_thickness=grate_thickness,
             width=base_width,
@@ -541,10 +540,9 @@ soap_holder(
     base_width=base_width,
     base_length=base_length,
     wall_height=wall_height,
-    base_thickness=base_thickness,
+    drainage_height=drainage_height,
     wall_thickness=wall_thickness,
     base_fillet_radius=base_fillet_radius,
-    drain_spout_height=drain_spout_height,
     drain_spout_width=drain_spout_width,
     drain_spout_inlet_height=drain_spout_inlet_height,
     drain_spout_radius=drain_spout_radius,
