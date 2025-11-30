@@ -35,6 +35,12 @@ base_fillet_radius = 10; // [250]
 drain_spout_outlet_height = 10; // [500]
 // Diameter of the circular spout outlet hole
 drain_spout_outlet_diameter = 10; // [100]
+// Angle of the spout outlet coppo (tilt from vertical)
+spout_outlet_angle = 22.5; // [45]
+// Depth of the spout outlet coppo extension
+spout_outlet_depth = 10; // [50]
+// Width of the cutout in the spout outlet coppo
+spout_outlet_cutout_width = 30; // [100]
 
 /* [Drainage Grate] */
 // Height offset from base where the drainage grate sits
@@ -194,7 +200,61 @@ module wall_perimeter(inner_width, inner_length, inner_fillet_radius, wall_thick
     }
 }
 
-module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, spout_outlet_height, spout_outlet_diameter) {
+// Module: spout_outlet_coppo()
+// Synopsis: Creates a decorative coppo (half-pipe) shape at the spout outlet.
+// Description:
+//   Creates a decorative tilted half-pipe extension at the water spout outlet.
+//   The coppo is angled downward and has a cutout to guide water flow.
+// Arguments:
+//   wall_thickness = Thickness of the wall
+//   spout_outlet_diameter = Diameter of the spout outlet hole
+//   spout_outlet_angle = Angle of tilt from vertical (degrees)
+//   spout_outlet_depth = Depth/length of the coppo extension
+//   spout_outlet_cutout_width = Width of the cutout in the coppo
+module spout_outlet_coppo(wall_thickness, spout_outlet_diameter, spout_outlet_angle, spout_outlet_depth, spout_outlet_cutout_width) {
+    // Tilt the coppo downward from horizontal by the specified angle
+    rotate([-90 + spout_outlet_angle, 0]) {
+        // Position the coppo at the edge of the outlet hole and extend outward
+        translate([0, spout_outlet_diameter/2, -spout_outlet_depth]) {
+            difference() {
+                // Create the half-pipe (180° annulus) by extruding along the depth
+                linear_extrude(spout_outlet_depth) {
+                    // Center the annulus at the outlet edge
+                    translate([0, -spout_outlet_diameter/2, 0]) {
+                        // Half-circle ring with wall thickness
+                        annulus(
+                            r_outer=spout_outlet_diameter/2,
+                            r_inner=spout_outlet_diameter/2 - wall_thickness,
+                            angle=180
+                        );
+                    }
+                }
+
+                // Cut out a section from the sides to create water flow guides
+                translate([-spout_outlet_cutout_width/2, -spout_outlet_diameter/2, 0])
+                rotate([90, 180, 90]) {
+                    linear_extrude(spout_outlet_cutout_width) {
+                        translate([-spout_outlet_diameter/2,  -spout_outlet_diameter/2, 0]) {
+                            difference() {
+                                // Start with a square in the corner
+                                square(spout_outlet_diameter/2);
+                                // Remove a 90° arc to create a rounded cutout edge
+                                arc(
+                                    r=spout_outlet_diameter/2,
+                                    angle=90,
+                                    wedge=true,
+                                    $fn=100
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, spout_outlet_height, spout_outlet_diameter, spout_outlet_angle, spout_outlet_depth, spout_outlet_cutout_width) {
     difference() {
         linear_extrude(wall_height) {
             wall_perimeter(
@@ -212,44 +272,19 @@ module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_th
                     circle(r=spout_outlet_diameter/2, $fn=100);
     }
 
-    // TODO: Refactor this to its own module (this is the spout outlet "coppo" shape)
+    // Decorative spout outlet coppo (half-pipe) shape
     translate([
         0, 
         -inner_length/2 + wall_thickness / 2, 
         spout_outlet_height 
     ]) {
-        // TODO: 22.5 should become a parameter
-        rotate([-90 + 22.5, 0]) {
-            translate([0, spout_outlet_diameter/2, -10]) {
-                difference() {
-                    // TODO: 10 should become a parameter
-                    linear_extrude(10){
-                        translate([0, -spout_outlet_diameter/2, 0]) {
-                            annulus(
-                                r_outer=spout_outlet_diameter/2,
-                                r_inner=spout_outlet_diameter/2 - wall_thickness,
-                                angle=180
-                            );
-                        }
-                    }
-
-                    // TODO: 30 should become a parameter
-                    translate([-30/2, -spout_outlet_diameter/2, 0])
-                    rotate([90, 180, 90])
-                        linear_extrude(30)
-                        translate([-spout_outlet_diameter/2,  -spout_outlet_diameter/2, 0])
-                            difference() {
-                                square(spout_outlet_diameter/2);
-                                arc(
-                                    r=spout_outlet_diameter/2,
-                                    angle=90,
-                                    wedge=true,
-                                    $fn=100
-                                );
-                            }
-                }
-            }
-        }
+        spout_outlet_coppo(
+            wall_thickness=wall_thickness,
+            spout_outlet_diameter=spout_outlet_diameter,
+            spout_outlet_angle=spout_outlet_angle,
+            spout_outlet_depth=spout_outlet_depth,
+            spout_outlet_cutout_width=spout_outlet_cutout_width
+        );
     }
     
 }
@@ -399,7 +434,7 @@ module drainage_grate(base_thickness, grate_height_offset, grate_thickness, widt
 module soap_holder(
     show_base, show_wall, show_grate,
     base_width, base_length, wall_height, base_thickness, wall_thickness, base_fillet_radius,
-    drain_spout_outlet_height, drain_spout_outlet_diameter,
+    drain_spout_outlet_height, drain_spout_outlet_diameter, spout_outlet_angle, spout_outlet_depth, spout_outlet_cutout_width,
     grate_height_offset, grate_thickness,
     hole_diameter, hole_spacing, hole_margin,
     inner_width, inner_length, inner_fillet_radius
@@ -421,7 +456,10 @@ module soap_holder(
             inner_fillet_radius=inner_fillet_radius,
             wall_thickness=wall_thickness,
             spout_outlet_height=drain_spout_outlet_height,
-            spout_outlet_diameter=drain_spout_outlet_diameter
+            spout_outlet_diameter=drain_spout_outlet_diameter,
+            spout_outlet_angle=spout_outlet_angle,
+            spout_outlet_depth=spout_outlet_depth,
+            spout_outlet_cutout_width=spout_outlet_cutout_width
         );
     if (show_grate) 
         color("lightgray") drainage_grate(
@@ -450,6 +488,9 @@ soap_holder(
     base_fillet_radius=base_fillet_radius,
     drain_spout_outlet_height=drain_spout_outlet_height,
     drain_spout_outlet_diameter=drain_spout_outlet_diameter,
+    spout_outlet_angle=spout_outlet_angle,
+    spout_outlet_depth=spout_outlet_depth,
+    spout_outlet_cutout_width=spout_outlet_cutout_width,
     grate_height_offset=grate_height_offset,
     grate_thickness=grate_thickness,
     hole_diameter=hole_diameter,
