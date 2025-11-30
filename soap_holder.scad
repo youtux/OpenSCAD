@@ -1,5 +1,7 @@
 include <round-anything/polyround.scad>
 include <BOSL2/std.scad>
+include <BOSL2/turtle3d.scad>
+include <BOSL2/skin.scad>
 
 /* [Parts to display] */
 // Number of fragments for circle rendering ($fn parameter)
@@ -20,7 +22,7 @@ base_length = 100; // [500]
 wall_height = 60; // [500]
 
 // Height of the solid bottom layer
-base_thickness = 10; // [20]
+base_thickness = 3; // [20]
 
 /* [Wall Properties] */
 // Thickness of the walls
@@ -30,21 +32,25 @@ base_fillet_radius = 10; // [250]
 
 // Can't use the [foo] [bar] syntax here because of makerworld.com parser
 
-/* [Spout Outlet Hole] */
-// Center height of the spout outlet hole from the base
-drain_spout_outlet_height = 10; // [500]
-// Diameter of the circular spout outlet hole
-drain_spout_outlet_diameter = 10; // [100]
-// Angle of the spout outlet coppo (tilt from vertical)
-spout_outlet_angle = 22.5; // [45]
-// Depth of the spout outlet coppo extension
-spout_outlet_depth = 10; // [50]
-// Width of the cutout in the spout outlet coppo
-spout_outlet_cutout_width = 30; // [100]
+/* [Drainage Spout] */
+// Center height of the spout from the base
+drain_spout_height = 3.5; // [500]
+// Width of the drainage spout opening
+drain_spout_width = 15; // [100]
+// Initial height of the spout at the inlet (where it connects to the wall)
+drain_spout_inlet_height = 10; // [100]
+// Radius of the rounded corners at the bottom of the U-shape
+drain_spout_radius = 2.5; // [50]
+// Final height of the spout at the outlet (determines taper)
+drain_spout_outlet_height = 5; // [100]
+// Length the spout extends outward from the wall
+drain_spout_depth = 9; // [50]
+// Downward tilt angle in degrees (positive = tilts down)
+drain_spout_lean_angle = 15; // [15]
 
 /* [Drainage Grate] */
 // Height offset from base where the drainage grate sits
-grate_height_offset = 10; // [50]
+grate_height_offset = 3; // [50]
 // Thickness of the drainage grate
 grate_thickness = 2; // [100]
 
@@ -71,8 +77,12 @@ assert(base_fillet_radius <= min(base_width, base_length)/2, "Base fillet radius
 assert(grate_height_offset <= wall_height, "Grate height offset cannot exceed wall height");
 assert(base_thickness <= grate_height_offset, "Base thickness cannot exceed grate height offset");
 // removed: assert on drain_spout_depth and drain_spout_fillet_radius (obsolete after removing wall opening)
-assert(drain_spout_outlet_height >= 0 && drain_spout_outlet_height <= wall_height, "Spout outlet hole height must be within wall height");
-assert(drain_spout_outlet_diameter > 0 && drain_spout_outlet_diameter <= inner_width, "Spout outlet hole diameter must be positive and fit within inner width");
+assert(drain_spout_height >= 0 && drain_spout_height <= wall_height, "Spout height must be within wall height");
+assert(drain_spout_width > 0 && drain_spout_width <= inner_width, "Spout width must be positive and fit within inner width");
+assert(drain_spout_inlet_height > 0, "Spout inlet height must be positive");
+assert(drain_spout_outlet_height > 0, "Spout outlet height must be positive");
+assert(drain_spout_radius > 0, "Spout radius must be positive");
+assert(drain_spout_depth > 0, "Spout depth must be positive");
 
 module prism(l, w, h) {
     polyhedron(
@@ -92,14 +102,111 @@ module prism(l, w, h) {
     );
 }
 
+function u_shape(width, height, radius, anchor=CENTER) =
+    let(
+        flat_width = width - radius*2,
+        side_height = height - radius,
+        // Calculate Y offset based on anchor point
+        // BOTTOM: base of U at y=0, so start at y=height (shape extends down to y=0)
+        // CENTER: middle of U at y=0, so start at y=height/2
+        // TOP: top of U at y=0, so start at y=0 (shape extends up from y=0)
+        y_offset = anchor == BOTTOM ? height :
+                   anchor == CENTER ? height/2 :
+                   anchor == TOP ? 0 :
+                   height/2,  // default to CENTER if unknown
+        start_pos = [-width/2, y_offset]
+    )
+    assert(width > 0, "U-channel width must be positive")
+    assert(height > 0, "U-channel height must be positive")
+    assert(radius > 0, "U-channel radius must be positive")
+    assert(flat_width >= 0, "U-channel width must be at least twice the radius")
+    assert(side_height >= 0, "U-channel height must be at least the radius")
+    turtle(
+        [
+            "right", 90,
+            "move", side_height,
+            "arcleft", radius, 90,
+            "move", flat_width,
+            "arcleft", radius , 90,
+            "move", side_height,
+        ], 
+        start_pos
+    );
 
-module annulus(r_outer, r_inner, angle=360) {
-    difference() {
-        arc(r=r_outer, angle=angle, $fn=100);
-        arc(r=r_inner, angle=angle, $fn=100);
-    }
+module u_channel(width, height, radius, thickness)
+{   
+    shape = u_shape(
+            width=width,
+            height=height,
+            radius=radius
+        );
+    stroke(shape, width=thickness, endcaps="round");
 }
 
+
+// Module: drainage_spout()
+// Synopsis: Creates a decorative water drainage spout that leans downward and tapers.
+// Description:
+//   Creates a U-shaped drainage channel (like a half-pipe or rain gutter) that extends outward
+//   from a wall or surface. The spout is designed to guide water flow with two key features:
+//   1. **Downward lean**: The channel tilts downward as it extends outward (for gravity drainage)
+//   2. **Vertical taper**: The opening gradually reduces in height from back to front
+//   
+//   This creates an attractive, functional water spout similar to traditional roof gutters or
+//   decorative gargoyle-style drainage features.
+//
+// Arguments:
+//   width = The width of the spout opening (distance between the outer edges of the two vertical sides)
+//   height = The initial height of the spout at the back/inlet (where it connects to the wall)
+//   radius = The radius of the rounded corners at the bottom of the U-shape
+//   thickness = The wall thickness of the spout
+//   outlet_height = The final height of the spout at the front/outlet (end point). This determines the taper amount.
+//   depth = The length the spout extends outward (along the Z-axis before transformation)
+//   lean_angle = The downward tilt angle in degrees (positive = tilts down). Default: 0 (no lean)
+//
+// Example:
+//   drainage_spout(
+//       width=50,           // 50mm wide spout opening
+//       height=25,          // Starts at 25mm tall at the inlet
+//       radius=12.5,        // 12.5mm rounded bottom
+//       thickness=2,        // 2mm wall thickness
+//       outlet_height=12.5, // Ends at 12.5mm tall at the outlet (50% reduction)
+//       depth=20,           // Extends 20mm outward
+//       lean_angle=30       // Tilt down 30 degrees
+//   );
+module drainage_spout(width, height, radius, thickness, outlet_height, depth, lean_angle=0)
+{
+    // Create the inlet U-channel cross-section shape (centerline path)
+    inlet_shape = u_shape(
+        width=width,
+        height=height,
+        radius=radius,
+        anchor=BOTTOM
+    );
+    
+    // Create the outlet U-channel cross-section shape (centerline path)
+    outlet_y_offset = -depth * tan(lean_angle);
+    outlet_shape = move([0, outlet_y_offset], u_shape(
+        width=width,
+        height=outlet_height,
+        radius=radius,
+        anchor=BOTTOM
+    ));
+    
+    // Use offset_stroke to get the boundary of the stroked path
+    // For open paths with closed=false, this returns a single closed path forming a ring
+    // deduplicate() removes duplicate points that turtle() may create at segment junctions
+    // (offset_stroke will fail with "Path has repeated points" error otherwise)
+    inlet_boundary = offset_stroke(deduplicate(inlet_shape), width=thickness, closed=false);
+    outlet_boundary = offset_stroke(deduplicate(outlet_shape), width=thickness, closed=false);
+    
+    // Lift to 3D
+    inlet_3d = path3d(inlet_boundary, 0);
+    outlet_3d = path3d(outlet_boundary, depth);
+    
+    // TODO: Apply some rounding around the edges and the big edge
+    skin([inlet_3d, outlet_3d], slices=0, caps=true, sampling="segment");
+}
 
 // Module: circles_on_path()
 // Synopsis: Places circles continuously along a path at regular intervals.
@@ -112,11 +219,10 @@ module annulus(r_outer, r_inner, angle=360) {
 // Arguments:
 //   path = The path to place circles on. A list of 2D points.
 //   r_circle = Radius of each circle. Default: 1
-//   circle_fn = Number of fragments for circle rendering ($fn parameter). Default: 50
 // Example:
 //   my_path = arc(r=30, n=10, angle=90);
-//   circles_on_path(my_path, r_circle=2, circle_fn=30);
-module circles_on_path(path, r_circle, circle_fn=50) {
+//   circles_on_path(my_path, r_circle=2);
+module circles_on_path(path, r_circle) {
     // Generate cut distances spaced by 2*r_circle along the path
     path_length = path_length(path);
     n_cuts = floor(path_length / (2*r_circle));
@@ -128,7 +234,7 @@ module circles_on_path(path, r_circle, circle_fn=50) {
     for (cut = cuts) {
         if (cut != undef) {
             translate(cut[0]){
-                circle(r=r_circle, $fn=circle_fn);
+                circle(r=r_circle, $fn=$fn);
             }
         }
     }
@@ -145,13 +251,12 @@ module circles_on_path(path, r_circle, circle_fn=50) {
 // Arguments:
 //   path = The path to create the bumpy ring on. A list of 2D points.
 //   r_circle = Radius of each circle/bump. The circles are spaced at intervals of 2*r_circle, and the ring width equals r_circle.
-//   circle_fn = Number of fragments for circle rendering ($fn parameter). Default: 50
 // Example:
 //   my_path = arc(r=30, n=10, angle=90);
-//   bumpy_path(my_path, r_circle=2, circle_fn=30);
-module bumpy_path(path, r_circle, circle_fn=50) {
+//   bumpy_path(my_path, r_circle=2);
+module bumpy_path(path, r_circle) {
     // Draw circles at each point along the arc
-    circles_on_path(path=path, r_circle=r_circle, circle_fn=circle_fn);
+    circles_on_path(path=path, r_circle=r_circle);
 
     // Draw ring on the inside using path offsets
     // Ring width equals r_circle
@@ -200,61 +305,7 @@ module wall_perimeter(inner_width, inner_length, inner_fillet_radius, wall_thick
     }
 }
 
-// Module: spout_outlet_coppo()
-// Synopsis: Creates a decorative coppo (half-pipe) shape at the spout outlet.
-// Description:
-//   Creates a decorative tilted half-pipe extension at the water spout outlet.
-//   The coppo is angled downward and has a cutout to guide water flow.
-// Arguments:
-//   wall_thickness = Thickness of the wall
-//   spout_outlet_diameter = Diameter of the spout outlet hole
-//   spout_outlet_angle = Angle of tilt from vertical (degrees)
-//   spout_outlet_depth = Depth/length of the coppo extension
-//   spout_outlet_cutout_width = Width of the cutout in the coppo
-module spout_outlet_coppo(wall_thickness, spout_outlet_diameter, spout_outlet_angle, spout_outlet_depth, spout_outlet_cutout_width) {
-    // Tilt the coppo downward from horizontal by the specified angle
-    rotate([-90 + spout_outlet_angle, 0]) {
-        // Position the coppo at the edge of the outlet hole and extend outward
-        translate([0, spout_outlet_diameter/2, -spout_outlet_depth]) {
-            difference() {
-                // Create the half-pipe (180° annulus) by extruding along the depth
-                linear_extrude(spout_outlet_depth) {
-                    // Center the annulus at the outlet edge
-                    translate([0, -spout_outlet_diameter/2, 0]) {
-                        // Half-circle ring with wall thickness
-                        annulus(
-                            r_outer=spout_outlet_diameter/2,
-                            r_inner=spout_outlet_diameter/2 - wall_thickness,
-                            angle=180
-                        );
-                    }
-                }
-
-                // Cut out a section from the sides to create water flow guides
-                translate([-spout_outlet_cutout_width/2, -spout_outlet_diameter/2, 0])
-                rotate([90, 180, 90]) {
-                    linear_extrude(spout_outlet_cutout_width) {
-                        translate([-spout_outlet_diameter/2,  -spout_outlet_diameter/2, 0]) {
-                            difference() {
-                                // Start with a square in the corner
-                                square(spout_outlet_diameter/2);
-                                // Remove a 90° arc to create a rounded cutout edge
-                                arc(
-                                    r=spout_outlet_diameter/2,
-                                    angle=90,
-                                    wedge=true,
-                                    $fn=100
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, spout_outlet_height, spout_outlet_diameter, spout_outlet_angle, spout_outlet_depth, spout_outlet_cutout_width) {
+module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, drain_spout_height, drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle) {
     difference() {
         linear_extrude(wall_height) {
             wall_perimeter(
@@ -264,29 +315,37 @@ module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_th
                 wall_thickness=wall_thickness
             );
         }
+
+        // TODO: This can't be a cylinder anymore
+        // because the spout is not a cylinder. We probably want to instead
+        // make a convex hull of the spout inlet shape extruded through the wall thickness.
         
         // Create a round hole on the wall for the spout exit
-        translate([0, -inner_length/2 + wall_thickness / 2 + epsilon, spout_outlet_height])
-            rotate([90, 0, 0])
-                linear_extrude(wall_thickness + 2*epsilon)
-                    circle(r=spout_outlet_diameter/2, $fn=100);
-    }
+        translate([0, -inner_length/2 + wall_thickness / 2 + epsilon, drain_spout_height])
+            cyl(
+                h=wall_thickness + 2*epsilon,
+                r=drain_spout_width/2,
+                anchor=BACK+TOP,
+                orient=BACK,
+                $fn=fn
+            );}
 
-    // Decorative spout outlet coppo (half-pipe) shape
+    // Drainage spout extending from the wall
     translate([
         0, 
-        -inner_length/2 + wall_thickness / 2, 
-        spout_outlet_height 
-    ]) {
-        spout_outlet_coppo(
-            wall_thickness=wall_thickness,
-            spout_outlet_diameter=spout_outlet_diameter,
-            spout_outlet_angle=spout_outlet_angle,
-            spout_outlet_depth=spout_outlet_depth,
-            spout_outlet_cutout_width=spout_outlet_cutout_width
-        );
-    }
-    
+        -inner_length/2 + wall_thickness/2, 
+        drain_spout_height
+    ])
+        rotate([90, 0, 0])
+            drainage_spout(
+                width=drain_spout_width,
+                height=drain_spout_inlet_height,
+                radius=drain_spout_radius,
+                thickness=wall_thickness,
+                outlet_height=drain_spout_outlet_height,
+                depth=drain_spout_depth + wall_thickness/2,
+                lean_angle=drain_spout_lean_angle
+            );    
 }
 
 module base(base_thickness, inner_width, inner_length, inner_fillet_radius, channel_width, grate_height_offset) {
@@ -358,12 +417,9 @@ module tile_grid(pattern, pitch, width, length) {
         - length: total length of the area to fill
     */
     // Get spacing based on pattern type
-    echo(pitch=pitch);
     spacing_data = (pattern == "hex") 
         ? hex_tiling_spacing(pitch)
         : square_tiling_spacing(pitch);
-    
-    echo(spacing_data=spacing_data);
     
     x_sp = spacing_data[0];
     y_sp = spacing_data[1];
@@ -434,7 +490,7 @@ module drainage_grate(base_thickness, grate_height_offset, grate_thickness, widt
 module soap_holder(
     show_base, show_wall, show_grate,
     base_width, base_length, wall_height, base_thickness, wall_thickness, base_fillet_radius,
-    drain_spout_outlet_height, drain_spout_outlet_diameter, spout_outlet_angle, spout_outlet_depth, spout_outlet_cutout_width,
+    drain_spout_height, drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle,
     grate_height_offset, grate_thickness,
     hole_diameter, hole_spacing, hole_margin,
     inner_width, inner_length, inner_fillet_radius
@@ -445,7 +501,7 @@ module soap_holder(
             inner_width=inner_width,
             inner_length=inner_length,
             inner_fillet_radius=inner_fillet_radius,
-            channel_width=drain_spout_outlet_diameter,
+            channel_width=drain_spout_width,
             grate_height_offset=grate_height_offset
         );
     if (show_wall) 
@@ -455,11 +511,13 @@ module soap_holder(
             inner_length=inner_length,
             inner_fillet_radius=inner_fillet_radius,
             wall_thickness=wall_thickness,
-            spout_outlet_height=drain_spout_outlet_height,
-            spout_outlet_diameter=drain_spout_outlet_diameter,
-            spout_outlet_angle=spout_outlet_angle,
-            spout_outlet_depth=spout_outlet_depth,
-            spout_outlet_cutout_width=spout_outlet_cutout_width
+            drain_spout_height=drain_spout_height,
+            drain_spout_width=drain_spout_width,
+            drain_spout_inlet_height=drain_spout_inlet_height,
+            drain_spout_radius=drain_spout_radius,
+            drain_spout_outlet_height=drain_spout_outlet_height,
+            drain_spout_depth=drain_spout_depth,
+            drain_spout_lean_angle=drain_spout_lean_angle
         );
     if (show_grate) 
         color("lightgray") drainage_grate(
@@ -486,11 +544,13 @@ soap_holder(
     base_thickness=base_thickness,
     wall_thickness=wall_thickness,
     base_fillet_radius=base_fillet_radius,
+    drain_spout_height=drain_spout_height,
+    drain_spout_width=drain_spout_width,
+    drain_spout_inlet_height=drain_spout_inlet_height,
+    drain_spout_radius=drain_spout_radius,
     drain_spout_outlet_height=drain_spout_outlet_height,
-    drain_spout_outlet_diameter=drain_spout_outlet_diameter,
-    spout_outlet_angle=spout_outlet_angle,
-    spout_outlet_depth=spout_outlet_depth,
-    spout_outlet_cutout_width=spout_outlet_cutout_width,
+    drain_spout_depth=drain_spout_depth,
+    drain_spout_lean_angle=drain_spout_lean_angle,
     grate_height_offset=grate_height_offset,
     grate_thickness=grate_thickness,
     hole_diameter=hole_diameter,
