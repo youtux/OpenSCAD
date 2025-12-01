@@ -132,7 +132,6 @@ function u_shape(width, height, radius, anchor=CENTER) =
         start_pos
     );
 
-
 // Module: drainage_spout()
 // Synopsis: Creates a decorative water drainage spout that leans downward and tapers.
 // Description:
@@ -144,6 +143,12 @@ function u_shape(width, height, radius, anchor=CENTER) =
 //   This creates an attractive, functional water spout similar to traditional roof gutters or
 //   decorative gargoyle-style drainage features.
 //
+//   The construction process:
+//   1. Generate inlet and outlet U-shaped centerline paths using turtle graphics
+//   2. Apply offset_stroke to create thick-walled boundaries from the centerlines
+//   3. Round the corners of these boundaries for smoother edges
+//   4. Lift both profiles to 3D and skin between them to create the tapered channel
+//
 // Arguments:
 //   width = The width of the spout opening (distance between the outer edges of the two vertical sides)
 //   height = The initial height of the spout at the back/inlet (where it connects to the wall)
@@ -152,6 +157,7 @@ function u_shape(width, height, radius, anchor=CENTER) =
 //   outlet_height = The final height of the spout at the front/outlet (end point). This determines the taper amount.
 //   depth = The length the spout extends outward (along the Z-axis before transformation)
 //   lean_angle = The downward tilt angle in degrees (positive = tilts down). Default: 0 (no lean)
+//   edge_rounding = Radius for rounding the sharp corners of the spout boundary. Default: 0.3
 //
 // Example:
 //   drainage_spout(
@@ -161,10 +167,24 @@ function u_shape(width, height, radius, anchor=CENTER) =
 //       thickness=2,        // 2mm wall thickness
 //       outlet_height=12.5, // Ends at 12.5mm tall at the outlet (50% reduction)
 //       depth=20,           // Extends 20mm outward
-//       lean_angle=30       // Tilt down 30 degrees
+//       lean_angle=30,      // Tilt down 30 degrees
+//       edge_rounding=0.5   // 0.5mm edge rounding
 //   );
-module drainage_spout(width, height, radius, thickness, outlet_height, depth, lean_angle=0)
+module drainage_spout(width, height, radius, thickness, outlet_height, depth, lean_angle=0, edge_rounding=0.3)
 {
+    // Helper function to create a stroked and rounded boundary from a U-shape centerline
+    // This creates the thick-walled outline with smooth corners
+    function create_boundary(centerline_path) = 
+        round_corners(
+            offset_stroke(
+                deduplicate(centerline_path),
+                width=thickness,
+                closed=false  // Input path is open (U-shape doesn't connect back to itself)
+            ),
+            radius=edge_rounding,
+            closed=true  // Output from offset_stroke is closed (forms a complete ring)
+        );
+    
     // Create the inlet U-channel cross-section shape (centerline path)
     inlet_shape = u_shape(
         width=width,
@@ -174,6 +194,7 @@ module drainage_spout(width, height, radius, thickness, outlet_height, depth, le
     );
     
     // Create the outlet U-channel cross-section shape (centerline path)
+    // Offset in Y to account for the downward lean
     outlet_y_offset = -depth * tan(lean_angle);
     outlet_shape = move([0, outlet_y_offset], u_shape(
         width=width,
@@ -182,18 +203,20 @@ module drainage_spout(width, height, radius, thickness, outlet_height, depth, le
         anchor=BOTTOM
     ));
     
-    // Use offset_stroke to get the boundary of the stroked path
-    // For open paths with closed=false, this returns a single closed path forming a ring
-    // deduplicate() removes duplicate points that turtle() may create at segment junctions
-    // (offset_stroke will fail with "Path has repeated points" error otherwise)
-    inlet_boundary = offset_stroke(deduplicate(inlet_shape), width=thickness, closed=false);
-    outlet_boundary = offset_stroke(deduplicate(outlet_shape), width=thickness, closed=false);
+    // Generate the thick-walled boundaries for both inlet and outlet
+    // offset_stroke() takes an open path (the U centerline) and creates a closed ring path
+    // by offsetting both sides of the path by thickness/2
+    // deduplicate() removes any duplicate points from turtle() to prevent offset_stroke errors
+    // round_corners() smooths the sharp corners in the boundary for better aesthetics
+    inlet_boundary = create_boundary(inlet_shape);
+    outlet_boundary = create_boundary(outlet_shape);
     
-    // Lift to 3D
+    // Lift the 2D boundaries to 3D at their respective depths
     inlet_3d = path3d(inlet_boundary, 0);
     outlet_3d = path3d(outlet_boundary, depth);
     
-    // TODO: Apply some rounding around the edges and the big edge
+    // Create the 3D surface by interpolating between the two cross-sections
+    // This produces the tapered, leaning channel
     skin([inlet_3d, outlet_3d], slices=0, caps=true, sampling="segment");
 }
 
