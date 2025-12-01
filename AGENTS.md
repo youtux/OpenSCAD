@@ -27,9 +27,8 @@ When developing SCAD scripts with complex logic:
 
 1. Add `echo()` statements with descriptive messages
 2. Run through OpenSCAD to see the output
-3. Filter output using `grep` to find specific messages:
    ```bash
-   /Applications/OpenSCAD.app/Contents/MacOS/openscad -o /tmp/test.stl debug.scad 2>&1 | grep "DEBUG\|ECHO"
+   /Applications/OpenSCAD.app/Contents/MacOS/openscad --preview -o /tmp/test.stl debug.scad 2>&1
    ```
 
 ### Environment
