@@ -7,11 +7,11 @@ include <BOSL2/skin.scad>
 // Number of fragments for circle rendering ($fn parameter)
 fn = 10;
 // Display the base with drainage slope
-show_base = true;
+show_base = false;
 // Display the outer walls
 show_wall = true;
 // Display the drainage grate with holes
-show_grate = true;
+show_grate = false;
 
 /* [Base Dimensions] */
 // Width of the soap holder (X-axis)
@@ -19,7 +19,7 @@ base_width = 100; // [500]
 // Length of the soap holder (Y-axis, front-to-back)
 base_length = 100; // [500]
 // Height of the soap holder walls (Z-axis)
-wall_height = 60; // [500]
+wall_height = 20; // [500]
 
 // Height of the drainage level (base thickness and spout center height)
 drainage_height = 3; // [20]
@@ -42,7 +42,7 @@ drain_spout_radius = 2.5; // [50]
 // Final height of the spout at the outlet (determines taper)
 drain_spout_outlet_height = 5; // [100]
 // Length the spout extends outward from the wall
-drain_spout_depth = 9; // [50]
+drain_spout_depth = 7.5; // [50]
 // Downward tilt angle in degrees (positive = tilts down)
 drain_spout_lean_angle = 15; // [15]
 
@@ -61,7 +61,7 @@ hole_spacing = 0.5; // [20]
 hole_margin = 2; // [20]
 
 /* [Hidden] */
-epsilon = 0.001;
+epsilon = $preview ? 0.001 : 0;
 
 $fn = fn;
 
@@ -74,7 +74,7 @@ inner_fillet_radius = base_fillet_radius - wall_thickness / 2;
 assert(base_fillet_radius <= min(base_width, base_length)/2, "Base fillet radius cannot exceed half the smaller base dimension");
 assert(drainage_height <= wall_height, "Drainage height cannot exceed wall height");
 assert(drainage_height >= 0, "Drainage height must be non-negative");
-assert(grate_height_offset <= wall_height, "Grate height offset cannot exceed wall height");
+// assert(grate_height_offset <= wall_height, "Grate height offset cannot exceed wall height");
 assert(drainage_height <= grate_height_offset, "Drainage height cannot exceed grate height offset");
 // removed: assert on drain_spout_depth and drain_spout_fillet_radius (obsolete after removing wall opening)
 assert(drain_spout_width > 0 && drain_spout_width <= inner_width, "Spout width must be positive and fit within inner width");
@@ -131,16 +131,6 @@ function u_shape(width, height, radius, anchor=CENTER) =
         ], 
         start_pos
     );
-
-module u_channel(width, height, radius, thickness)
-{   
-    shape = u_shape(
-            width=width,
-            height=height,
-            radius=radius
-        );
-    stroke(shape, width=thickness, endcaps="round");
-}
 
 
 // Module: drainage_spout()
@@ -304,32 +294,7 @@ module wall_perimeter(inner_width, inner_length, inner_fillet_radius, wall_thick
     }
 }
 
-module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, drainage_height, drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle) {
-    difference() {
-        linear_extrude(wall_height) {
-            wall_perimeter(
-                inner_width=inner_width,
-                inner_length=inner_length,
-                inner_fillet_radius=inner_fillet_radius,
-                wall_thickness=wall_thickness
-            );
-        }
-
-        // TODO: This can't be a cylinder anymore
-        // because the spout is not a cylinder. We probably want to instead
-        // make a convex hull of the spout inlet shape extruded through the wall thickness.
-        
-        // Create a round hole on the wall for the spout exit
-        translate([0, -inner_length/2 + wall_thickness / 2 + epsilon, drainage_height])
-            cyl(
-                h=wall_thickness + 2*epsilon,
-                r=drain_spout_width/2,
-                anchor=BACK+TOP,
-                orient=BACK,
-                $fn=fn
-            );}
-
-    // Drainage spout extending from the wall
+module positioned_drainage_spout(inner_length, wall_thickness, drainage_height, drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle) {
     translate([
         0, 
         -inner_length/2 + wall_thickness/2, 
@@ -344,7 +309,48 @@ module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_th
                 outlet_height=drain_spout_outlet_height,
                 depth=drain_spout_depth + wall_thickness/2,
                 lean_angle=drain_spout_lean_angle
-            );    
+            );
+}
+
+module wall(wall_height, inner_width, inner_length, inner_fillet_radius, wall_thickness, drainage_height, drain_spout_width, drain_spout_inlet_height, drain_spout_radius, drain_spout_outlet_height, drain_spout_depth, drain_spout_lean_angle) {
+    difference() {
+        linear_extrude(wall_height) {
+            wall_perimeter(
+                inner_width=inner_width,
+                inner_length=inner_length,
+                inner_fillet_radius=inner_fillet_radius,
+                wall_thickness=wall_thickness
+            );
+        }
+
+        // Subtract the convex hull of the drainage spout to create the opening
+        translate([0, 2*epsilon, 0])
+            hull()
+                positioned_drainage_spout(
+                    inner_length=inner_length,
+                    wall_thickness=wall_thickness,
+                    drainage_height=drainage_height,
+                    drain_spout_width=drain_spout_width,
+                    drain_spout_inlet_height=drain_spout_inlet_height,
+                    drain_spout_radius=drain_spout_radius,
+                    drain_spout_outlet_height=drain_spout_outlet_height,
+                    drain_spout_depth=drain_spout_depth,
+                    drain_spout_lean_angle=drain_spout_lean_angle
+                );
+    }
+
+    // Drainage spout extending from the wall
+    positioned_drainage_spout(
+        inner_length=inner_length,
+        wall_thickness=wall_thickness,
+        drainage_height=drainage_height,
+        drain_spout_width=drain_spout_width,
+        drain_spout_inlet_height=drain_spout_inlet_height,
+        drain_spout_radius=drain_spout_radius,
+        drain_spout_outlet_height=drain_spout_outlet_height,
+        drain_spout_depth=drain_spout_depth,
+        drain_spout_lean_angle=drain_spout_lean_angle
+    );    
 }
 
 module base(drainage_height, inner_width, inner_length, inner_fillet_radius, channel_width, grate_height_offset) {
